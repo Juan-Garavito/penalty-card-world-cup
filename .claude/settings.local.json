@@ -1,0 +1,32 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(Get-ChildItem -Path \"C:\\\\Users\\\\juang\\\\Documents\\\\card-world-cup\" -Force | Select-Object Name, @{Name=\"Type\";Expression={if\\($_.PSIsContainer\\){\"DIR\"}else{\"FILE\"}}} | Sort-Object Name)",
+      "mcp__plugin_engram_engram__mem_save",
+      "mcp__plugin_engram_engram__mem_search",
+      "mcp__plugin_engram_engram__mem_judge",
+      "mcp__plugin_engram_engram__mem_get_observation",
+      "WebSearch",
+      "mcp__plugin_engram_engram__mem_update",
+      "Bash(Get-ChildItem -Recurse \"C:\\\\Users\\\\juang\\\\Documents\\\\card-world-cup\\\\src\\\\entities\")",
+      "Bash(Select-Object FullName)",
+      "Bash(npm run *)",
+      "Bash(npx eslint *)",
+      "Bash(npx tsc *)",
+      "Bash(Remove-Item \"C:\\\\Users\\\\juang\\\\Documents\\\\card-world-cup\\\\src\\\\entities\\\\Cards\\\\CardPower.ts\" -Force)",
+      "Bash(Remove-Item \"C:\\\\Users\\\\juang\\\\Documents\\\\card-world-cup\\\\src\\\\entities\\\\Cards\\\\CardActivate.ts\" -Force)",
+      "Bash(Write-Host \"Deleted both legacy files\")",
+      "Bash(powershell.exe *)",
+      "mcp__plugin_engram_engram__mem_session_summary",
+      "mcp__plugin_engram_engram__mem_context",
+      "Bash(npm install *)",
+      "Bash(npx prettier *)",
+      "Bash(npm ls *)",
+      "Bash(Select-String -Path \"src\\\\entities\\\\Match\\\\PenaltyResolver.ts\" -Pattern \"IPlayer|HumanPlayer|IAPlayer\")",
+      "Bash(npx vitest *)"
+    ]
+  },
+  "enabledPlugins": {
+    "pixijs-skills@pixijs-skills": true
+  }
+}

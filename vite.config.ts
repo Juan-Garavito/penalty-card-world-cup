@@ -1,0 +1,16 @@
+import { defineConfig } from "vite";
+
+import { assetpackPlugin } from "./scripts/assetpack-vite-plugin";
+
+// https://vite.dev/config/
+export default defineConfig({
+  base: "./",
+  plugins: [assetpackPlugin()],
+  server: {
+    port: 8000,
+    open: true,
+  },
+  define: {
+    APP_VERSION: JSON.stringify(process.env.npm_package_version),
+  },
+});
