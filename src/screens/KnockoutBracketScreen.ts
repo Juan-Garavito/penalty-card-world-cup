@@ -489,30 +489,6 @@ export class KnockoutBracketScreen extends Container {
       );
     }
 
-    // PLAY button (interactive mode, player match, not yet played, team is real)
-    // Placed inline over the (empty) score area so it stays inside the panel's
-    // own bounds — a button below the panel gets covered by the next panel,
-    // which is added later and renders on top in tightly-spaced columns (e.g. R32).
-    if (
-      !this._viewOnly &&
-      isPlayer &&
-      match.homeGoals === null &&
-      match.home.id !== "tbd" &&
-      match.away.id !== "tbd"
-    ) {
-      const playBtnW = large ? 44 : 36;
-      const playBtn = this._makePlayButton(
-        MATCH_W - playBtnW,
-        0,
-        playBtnW,
-        panelH,
-        () => {
-          this._onPlayMatch?.(match);
-        },
-      );
-      panel.addChild(playBtn);
-    }
-
     return panel;
   }
 
@@ -762,36 +738,6 @@ export class KnockoutBracketScreen extends Container {
     lbl.y = h / 2;
     btn.addChild(lbl);
 
-    return btn;
-  }
-
-  private _makePlayButton(
-    x: number,
-    y: number,
-    w: number,
-    h: number,
-    onClick: () => void,
-  ): Container {
-    const btn = new Container();
-    btn.x = x;
-    btn.y = y;
-    btn.eventMode = "static";
-    btn.cursor = "pointer";
-
-    const bg = new Graphics();
-    bg.rect(0, 0, w, h).fill({ color: GREEN });
-    btn.addChild(bg);
-
-    const lbl = makeText("PLAY", "body", 14, CREAM);
-    lbl.anchor.set(0.5);
-    lbl.x = w / 2;
-    lbl.y = h / 2;
-    btn.addChild(lbl);
-
-    btn.on("pointerdown", () => {
-      sfx.play(SOUND_ALIASES.buttonClick);
-      onClick();
-    });
     return btn;
   }
 }

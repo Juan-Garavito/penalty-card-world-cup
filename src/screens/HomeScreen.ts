@@ -28,7 +28,6 @@ export class HomeScreen extends Container {
   private _onStart: (() => void) | null = null;
   private _crtFilter: Filter | null = null;
   private _keyHandler: ((e: KeyboardEvent) => void) | null = null;
-  private _startClickHandler: (() => void) | null = null;
   private _footerTicker: ((t: Ticker) => void) | null = null;
   private _crtTicker: ((t: Ticker) => void) | null = null;
 
@@ -58,10 +57,6 @@ export class HomeScreen extends Container {
       window.removeEventListener("keydown", this._keyHandler);
     }
     this._keyHandler = null;
-    if (this._startClickHandler) {
-      this.off("pointerup", this._startClickHandler);
-      this._startClickHandler = null;
-    }
     if (this._footerTicker) {
       Ticker.shared.remove(this._footerTicker);
       this._footerTicker = null;
@@ -93,7 +88,6 @@ export class HomeScreen extends Container {
     this._buildFooter();
     this._buildSettingsButton();
     this._buildTutorialButton();
-    this._buildClickToStart();
 
     // CRT filter — requires WebGL; skipped gracefully in non-browser environments
     try {
@@ -110,20 +104,6 @@ export class HomeScreen extends Container {
     } catch {
       // no WebGL context (test runner) — skip filter
     }
-  }
-
-  // ─── Click anywhere to start ─────────────────────────────────────────────
-  // Settings/tutorial buttons and the menu item stop propagation on their own
-  // pointerup so a click on them doesn't also bubble up and trigger start.
-
-  private _buildClickToStart(): void {
-    this.eventMode = "static";
-    this.hitArea = new Rectangle(0, 0, W, H);
-    this._startClickHandler = () => {
-      sfx.play(SOUND_ALIASES.buttonClick);
-      this._onStart?.();
-    };
-    this.on("pointerup", this._startClickHandler);
   }
 
   // ─── Background ──────────────────────────────────────────────────────────
@@ -450,25 +430,57 @@ export class HomeScreen extends Container {
 
     // ── 5. Ball ──────────────────────────────────────────────────────────────
     const ball = new Graphics();
-    ball.circle(W / 2, H - 60, 10).fill(0xf6eccf);
-    ball.circle(W / 2, H - 60, 10).stroke({ color: 0x070b14, width: 2 });
+    ball.circle(W / 2, H - 100, 10).fill(0xf6eccf);
+    ball.circle(W / 2, H - 100, 10).stroke({ color: 0x070b14, width: 2 });
     this.addChild(ball);
   }
 
-  // ─── Footer ───────────────────────────────────────────────────────────────
+  // ─── Footer start button ────────────────────────────────────────────────
 
   private _buildFooter(): void {
-    const footer = makeText("PRESS ENTER FOR STARTING", "body", 18, 0xc8921a);
-    footer.anchor.set(0.5, 1);
-    footer.x = W / 2;
-    footer.y = H - 8;
-    this.addChild(footer);
+    const BTN_W = 360;
+    const BTN_H = 44;
+
+    const btn = new Container();
+    btn.x = W / 2 - BTN_W / 2;
+    btn.y = H - 8 - BTN_H;
+    btn.eventMode = "static";
+    btn.cursor = "pointer";
+    btn.hitArea = new Rectangle(0, 0, BTN_W, BTN_H);
+
+    // Same pixel-art ink-bordered look as the active nation tab.
+    const bg = new Graphics();
+    bg.rect(0, 0, BTN_W, BTN_H).fill(0xf5b73d);
+    bg.rect(0, 0, BTN_W, 2).fill(0x070b14);
+    bg.rect(0, BTN_H - 2, BTN_W, 2).fill(0x070b14);
+    bg.rect(0, 0, 2, BTN_H).fill(0x070b14);
+    bg.rect(BTN_W - 2, 0, 2, BTN_H).fill(0x070b14);
+    btn.addChild(bg);
+
+    const label = makeText(
+      "CLICK OR PRESS ENTER TO START",
+      "body",
+      16,
+      0x17171f,
+    );
+    label.anchor.set(0.5);
+    label.x = BTN_W / 2;
+    label.y = BTN_H / 2;
+    btn.addChild(label);
+
+    btn.on("pointerup", (e) => {
+      e.stopPropagation();
+      sfx.play(SOUND_ALIASES.buttonClick);
+      this._onStart?.();
+    });
+
+    this.addChild(btn);
 
     if (typeof requestAnimationFrame !== "undefined") {
       let elapsed = 0;
       this._footerTicker = (t: Ticker) => {
         elapsed += t.deltaMS;
-        footer.alpha = 0.35 + 0.65 * (0.5 + 0.5 * Math.sin(elapsed / 550));
+        btn.alpha = 0.75 + 0.25 * (0.5 + 0.5 * Math.sin(elapsed / 550));
       };
       Ticker.shared.add(this._footerTicker);
     }

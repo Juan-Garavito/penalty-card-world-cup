@@ -6,6 +6,9 @@
   "scripts": {
     "start": "npm run dev",
     "build": "npm run lint && tsc && vite build",
+    "build:poki": "cross-env VITE_AD_SDK=poki vite build",
+    "build:crazygames": "cross-env VITE_AD_SDK=crazygames vite build",
+    "build:none": "cross-env VITE_AD_SDK=none vite build",
     "lint": "eslint .",
     "dev": "vite",
     "test": "vitest run",
@@ -21,6 +24,7 @@
     "@eslint/js": "9.21.0",
     "@resvg/resvg-js": "^2.6.2",
     "@vitest/coverage-v8": "^4.1.7",
+    "cross-env": "^10.1.0",
     "eslint": "9.21.0",
     "eslint-config-prettier": "10.1.2",
     "eslint-plugin-prettier": "5.2.6",

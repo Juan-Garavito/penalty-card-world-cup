@@ -127,12 +127,38 @@ function trophy(cx, baseY, h) {
   y -= rimH;
   svg += `<rect x="${cx - 5 * u}" y="${y}" width="${10 * u}" height="${rimH}" fill="${COLOR.cream}" ${ink}/>`;
 
-  // handles (open loops either side of the bowl)
-  const handleY = y + rimH + bowlH * 0.45;
-  const handleW = u * 1.8;
+  // handles — open brackets (top arm + bottom arm + outer bar, no inner
+  // edge) that overlap INTO the bowl's silhouette, so they read as welded
+  // onto the body instead of floating beside it. The bowl is a trapezoid
+  // that narrows going down, so the anchor must use the bowl's actual
+  // half-width at the handle's *lowest* point — anchoring to topHalf (the
+  // widest point, at the rim) is what left the old handles stranded with a
+  // visible gap once the bowl had tapered inward.
   const handleH = u * 2.6;
-  svg += `<rect x="${cx - topHalf - handleW}" y="${handleY - handleH / 2}" width="${handleW}" height="${handleH}" fill="none" stroke="${COLOR.goldDeep}" stroke-width="${u * 0.6}"/>`;
-  svg += `<rect x="${cx + topHalf}" y="${handleY - handleH / 2}" width="${handleW}" height="${handleH}" fill="none" stroke="${COLOR.goldDeep}" stroke-width="${u * 0.6}"/>`;
+  const handleCenterY = bowlTopY + bowlH * 0.45;
+  const handleBottomY = handleCenterY + handleH / 2;
+  const tAtHandleBottom = (handleBottomY - bowlTopY) / bowlH;
+  const halfWidthAtHandleBottom =
+    topHalf + (bottomHalf - topHalf) * tAtHandleBottom;
+  const overlap = u * 0.6; // how far the bracket reaches into the bowl
+  const handleW = u * 1.8;
+  const armH = u * 0.7;
+  const outerBarW = u * 0.7;
+  const handleTopY = handleCenterY - handleH / 2;
+
+  // Left handle
+  const lInnerX = cx - halfWidthAtHandleBottom + overlap;
+  const lOuterX = lInnerX - handleW;
+  svg += `<rect x="${lOuterX}" y="${handleTopY}" width="${handleW}" height="${armH}" fill="${COLOR.goldDeep}" ${ink}/>`;
+  svg += `<rect x="${lOuterX}" y="${handleBottomY - armH}" width="${handleW}" height="${armH}" fill="${COLOR.goldDeep}" ${ink}/>`;
+  svg += `<rect x="${lOuterX}" y="${handleTopY}" width="${outerBarW}" height="${handleH}" fill="${COLOR.goldDeep}" ${ink}/>`;
+
+  // Right handle (mirrored)
+  const rInnerX = cx + halfWidthAtHandleBottom - overlap;
+  const rOuterX = rInnerX + handleW;
+  svg += `<rect x="${rInnerX}" y="${handleTopY}" width="${handleW}" height="${armH}" fill="${COLOR.goldDeep}" ${ink}/>`;
+  svg += `<rect x="${rInnerX}" y="${handleBottomY - armH}" width="${handleW}" height="${armH}" fill="${COLOR.goldDeep}" ${ink}/>`;
+  svg += `<rect x="${rOuterX - outerBarW}" y="${handleTopY}" width="${outerBarW}" height="${handleH}" fill="${COLOR.goldDeep}" ${ink}/>`;
 
   // sparkle near the rim
   const sx = cx + topHalf * 0.6;

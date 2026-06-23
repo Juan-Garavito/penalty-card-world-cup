@@ -26,6 +26,6 @@ export function registerSounds(): void {
   sound.add(SOUND_ALIASES.coinFlip, `${SOUNDS_BASE}/coin.sound.m4a`);
   sound.add(SOUND_ALIASES.drumRoll, `${SOUNDS_BASE}/drum.sound.m4a`);
   sound.add(SOUND_ALIASES.punch, `${SOUNDS_BASE}/punch.sound.mp3`);
-  sound.add(SOUND_ALIASES.winner, `${SOUNDS_BASE}/winner.sound.mp3`);
+  sound.add(SOUND_ALIASES.winner, `${SOUNDS_BASE}/winner.sound.m4a`);
   sound.add(SOUND_ALIASES.save, `${SOUNDS_BASE}/ou.sound.m4a`);
 }

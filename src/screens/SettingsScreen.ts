@@ -1,4 +1,4 @@
-import { Container, Graphics, Text } from "pixi.js";
+import { Container, Filter, Graphics, Text, Ticker } from "pixi.js";
 import { engine } from "../engine/instance.ts";
 import { sfx } from "../engine/audio/audio.ts";
 import { SOUND_ALIASES } from "../engine/audio/sounds.ts";
@@ -8,6 +8,7 @@ import {
   applyAudioSettings,
 } from "../engine/audio/audioSettings.ts";
 import type { AudioSettings } from "../engine/audio/audioSettings.ts";
+import { createCRTFilter } from "./filters/CRTFilter.ts";
 
 // ─── Layout (virtual canvas, matches HomeScreen's 1280×720) ──────────────────
 
@@ -41,6 +42,8 @@ const COLOR = {
 
 export class SettingsScreen extends Container {
   private _settings: AudioSettings = loadAudioSettings();
+  private _crtFilter: Filter | null = null;
+  private _crtTicker: ((t: Ticker) => void) | null = null;
 
   prepare(): void {
     this.removeChildren();
@@ -48,6 +51,24 @@ export class SettingsScreen extends Container {
     this._buildOverlay();
     const panel = this._buildPanel();
     this.addChild(panel);
+
+    // CRT filter — requires WebGL; skipped gracefully in non-browser environments
+    try {
+      this._crtFilter = createCRTFilter();
+      this.filters = [this._crtFilter];
+      if (typeof requestAnimationFrame !== "undefined") {
+        this._crtTicker = (t: Ticker) => {
+          if (!this._crtFilter) return;
+          const u = this._crtFilter.resources["crtUniforms"] as {
+            uniforms: { uTime: number };
+          };
+          u.uniforms.uTime += t.deltaMS / 1000;
+        };
+        Ticker.shared.add(this._crtTicker);
+      }
+    } catch {
+      // no WebGL context (test runner) — skip filter
+    }
   }
 
   async show(): Promise<void> {}
@@ -55,6 +76,12 @@ export class SettingsScreen extends Container {
   async hide(): Promise<void> {}
 
   reset(): void {
+    if (this._crtTicker) {
+      Ticker.shared.remove(this._crtTicker);
+      this._crtTicker = null;
+    }
+    this.filters = [];
+    this._crtFilter = null;
     this.removeChildren();
   }
 

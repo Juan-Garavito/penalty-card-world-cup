@@ -26,3 +26,4 @@ dist-ssr
 public/assets
 .assetpack
 src/manifest.json
+.audio-originals-backup

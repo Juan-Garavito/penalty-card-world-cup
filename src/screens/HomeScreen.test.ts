@@ -73,10 +73,9 @@ describe("HomeScreen", () => {
     expect(onStart).toHaveBeenCalledTimes(1);
   });
 
-  it("SCEN-HS-CLICK-ANYWHERE: pointerup anywhere on the screen fires the onStart callback", () => {
+  it("SCEN-HS-NO-CLICK-ANYWHERE: pointerup on the screen background does not fire onStart", () => {
     const { screen, onStart } = makeScreen();
-    expect(screen.eventMode).toBe("static");
     screen.emit("pointerup", {} as never);
-    expect(onStart).toHaveBeenCalledTimes(1);
+    expect(onStart).not.toHaveBeenCalled();
   });
 });

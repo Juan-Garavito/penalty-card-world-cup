@@ -2,7 +2,7 @@ import { engine } from "./engine/instance.ts";
 import { watchOrientation } from "./engine/utils/orientationGuard.ts";
 import "@pixi/sound";
 import { registerSounds, SOUND_ALIASES } from "./engine/audio/sounds.ts";
-import { bgm } from "./engine/audio/audio.ts";
+import { bgm, sfx } from "./engine/audio/audio.ts";
 import {
   loadAudioSettings,
   applyAudioSettings,
@@ -164,7 +164,6 @@ watchOrientation();
       roundTitle: `MATCHDAY ${matchday}`,
       onContinue: () => void goToGroupStage(),
     });
-    await adBreak();
     await engine.navigation.showScreen(MatchResultsScreen);
 
     void playerGroupId;
@@ -177,6 +176,12 @@ watchOrientation();
     const bracket = buildKnockoutBracket(_tournament.groups);
     const simulated = simulateFullBracket(bracket, rng);
     const champion = simulated.rounds.find((r) => r.phase === "final")?.matches[0]?.winner ?? null;
+    // Same champion-reveal audio treatment as MatchResultsScreen: silence the
+    // background music and let the victory stinger play on its own.
+    if (champion) {
+      sfx.play(SOUND_ALIASES.winner);
+      bgm.pause();
+    }
     setPendingViewOnlyKnockout(simulated, champion, _tournament.playerTeam.id, () => void goToHome());
     await engine.navigation.showScreen(KnockoutBracketScreen);
   }
@@ -209,7 +214,6 @@ watchOrientation();
         void goToViewOnlyBracket();
       },
     });
-    await adBreak();
     await engine.navigation.showScreen(MatchResultsScreen);
   }
 
@@ -355,6 +359,15 @@ watchOrientation();
     );
     setPendingTeamNames(playerTeam.abbreviation, opponentTeam.abbreviation);
     // _pendingOnMatchComplete is already set by the caller
+
+    // Only midgame ad break left in the tournament flow: once, right before
+    // the final (win or lose, the player never sees another one — there's
+    // no match after the final). Keeps flow uninterrupted everywhere else;
+    // rewarded ads (card-use recovery) are unaffected by this.
+    if (match.phase === "final") {
+      await adBreak();
+    }
+
     adGameplayStart();
     bgm.duck();
     await engine.navigation.showScreen(PenaltyScreen);
@@ -376,6 +389,12 @@ watchOrientation();
   // ── Home screen entry point ───────────────────────────────────────────────
 
   async function goToHome(): Promise<never> {
+    // Every path into Home follows a champion reveal (real win or simulated),
+    // which pauses bgm and plays the winner stinger — bring bgm back and cut
+    // the stinger short in case the player continued before it finished.
+    // bgm.resume() is safe even when it isn't paused (e.g. the first boot call).
+    sfx.stop(SOUND_ALIASES.winner);
+    bgm.resume();
     setPendingOnStart(() => void goToTeamSelection());
     await engine.navigation.showScreen(HomeScreen);
     return undefined as never;

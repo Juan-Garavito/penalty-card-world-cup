@@ -1,7 +1,8 @@
-import { Container, Graphics, Text } from "pixi.js";
+import { Container, Filter, Graphics, Text, Ticker } from "pixi.js";
 import { engine } from "../engine/instance.ts";
 import { sfx } from "../engine/audio/audio.ts";
 import { SOUND_ALIASES } from "../engine/audio/sounds.ts";
+import { createCRTFilter } from "./filters/CRTFilter.ts";
 
 // ─── Layout (virtual canvas, matches HomeScreen's 1280×720) ──────────────────
 
@@ -58,28 +59,10 @@ const GOLD = 0xf5b73d;
 const RED = 0xff5566;
 const GREEN = 0x55ff77;
 const BLUE = 0x2f6fe0;
-const ORANGE = 0xe8702a;
 const PURPLE = 0xb15be0;
 const GRAY = 0x8a8f9c;
 
 const PAGES: TutorialPage[] = [
-  {
-    title: "TOURNAMENT FORMAT",
-    boxes: [
-      { x: 40, y: 40, w: 220, h: 90, title: "GROUP STAGE", lines: ["Round-robin matches", "Top teams advance"], accent: BLUE },
-      { x: 300, y: 40, w: 220, h: 90, title: "KNOCKOUT", lines: ["Single elimination", "Win or go home"], accent: ORANGE },
-      { x: 560, y: 40, w: 220, h: 90, title: "PENALTY SHOOTOUT", lines: ["Decides every", "knockout match"], accent: GOLD },
-    ],
-    arrows: [
-      { x1: 260, x2: 300, y: 85 },
-      { x1: 520, x2: 560, y: 85 },
-    ],
-    bullets: [
-      "The World Cup runs through Group Stage → Knockout Stage → Penalty Shootouts.",
-      "In the Group Stage, the best teams from each group advance.",
-      "Every Knockout match — including the Final — is decided by a Penalty Shootout.",
-    ],
-  },
   {
     title: "PENALTY BASICS",
     boxes: [
@@ -152,6 +135,8 @@ export class TutorialScreen extends Container {
   private _dots: Graphics[] = [];
   private _prevBtn!: Container;
   private _nextBtn!: Container;
+  private _crtFilter: Filter | null = null;
+  private _crtTicker: ((t: Ticker) => void) | null = null;
 
   prepare(): void {
     this.removeChildren();
@@ -163,12 +148,36 @@ export class TutorialScreen extends Container {
     this.addChild(panel);
 
     this._renderPage();
+
+    // CRT filter — requires WebGL; skipped gracefully in non-browser environments
+    try {
+      this._crtFilter = createCRTFilter();
+      this.filters = [this._crtFilter];
+      if (typeof requestAnimationFrame !== "undefined") {
+        this._crtTicker = (t: Ticker) => {
+          if (!this._crtFilter) return;
+          const u = this._crtFilter.resources["crtUniforms"] as {
+            uniforms: { uTime: number };
+          };
+          u.uniforms.uTime += t.deltaMS / 1000;
+        };
+        Ticker.shared.add(this._crtTicker);
+      }
+    } catch {
+      // no WebGL context (test runner) — skip filter
+    }
   }
 
   async show(): Promise<void> {}
   async hide(): Promise<void> {}
 
   reset(): void {
+    if (this._crtTicker) {
+      Ticker.shared.remove(this._crtTicker);
+      this._crtTicker = null;
+    }
+    this.filters = [];
+    this._crtFilter = null;
     this.removeChildren();
     this._content = null;
     this._dots = [];

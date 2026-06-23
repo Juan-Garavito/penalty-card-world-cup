@@ -1,4 +1,4 @@
-import type { Filter, Graphics } from "pixi.js";
+import type { Filter, Sprite } from "pixi.js";
 import { ColorMatrixFilter } from "pixi.js";
 import type { ResolutionEvidence } from "../entities/Match/ResolutionOutcome.ts";
 import type { Side } from "../entities/Players/Side.ts";
@@ -22,6 +22,9 @@ export const ANIM_TIMING = {
   END_BEAT_DURATION: 400,
   DARKEN_FADE_DURATION: 200, // fade-in for the post-kick darken overlay (direct-goal path)
 };
+
+// Full rotations the ball spins through during its flight to the goal.
+const BALL_SPIN_TURNS = 2;
 
 export const KEEPER_DIVE_RADIANS = {
   left: Math.PI / 4,
@@ -47,7 +50,7 @@ type CardRef = {
 interface AnimationContext {
   striker: LayeredCharacter;
   goalkeeper: LayeredCharacter;
-  ball: Graphics;
+  ball: Sprite;
   ballPositions: BallPositions;
   strikerPos: { x: number; y: number };
   keeperPos: { x: number; y: number };
@@ -152,6 +155,7 @@ export class PenaltyAnimation {
     if (goalkeeper.scale) goalkeeper.scale.x = Math.abs(goalkeeper.scale.x);
     ball.x = ballPositions.start.x;
     ball.y = ballPositions.start.y;
+    ball.rotation = 0;
     if (ball.zIndex !== undefined) ball.zIndex = 1; // reset: behind keeper
     cardDuelPanel.visible = false;
     darkenOverlay.visible = false;
@@ -485,6 +489,7 @@ export class PenaltyAnimation {
     const start = this.ctx.ballPositions.start;
     this.ctx.ball.x = start.x + (target.x - start.x) * t;
     this.ctx.ball.y = start.y + (target.y - start.y) * t;
+    this.ctx.ball.rotation = t * BALL_SPIN_TURNS * Math.PI * 2;
   }
 
   private _ballTargetForSide(side: Side): { x: number; y: number } {

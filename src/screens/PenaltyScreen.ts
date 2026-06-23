@@ -3,6 +3,7 @@ import {
   Container,
   Filter,
   Graphics,
+  Rectangle,
   Sprite,
   Text,
   Texture,
@@ -10,6 +11,9 @@ import {
   Ticker,
 } from "pixi.js";
 import { createCRTFilter } from "./filters/CRTFilter.ts";
+import { engine } from "../engine/instance.ts";
+import { TutorialScreen } from "./TutorialScreen.ts";
+import { SettingsScreen } from "./SettingsScreen.ts";
 import type { PenaltyPresenter, PenaltyViewModel } from "./PenaltyPresenter.ts";
 import type {
   PenaltySpriteBundle,
@@ -61,7 +65,7 @@ const LAYOUT = {
   // so the pixel-art tiles instead of stretching). Grass color is sampled from
   // the goal sprite's own grass so there's no seam.
   ENV: {
-    grassColor: 0x75d21b,
+    grassColor: "#2f8f43",
     standsTopFrac: 0.03, // stands band starts just below the score bar
     fansBandFrac: 0.22, // fan-rows band height as a fraction of h
     wallFrac: 0.2, // horizontal wall height — independent of goal scale
@@ -79,13 +83,22 @@ const LAYOUT = {
   STRIKER_POS: { x: 384, y: 660 },
   CHARACTER_SCALE: 4,
   KEEPER_SCALE: 3.5, // keeper a bit smaller than the striker
-  BALL_RADIUS: 12,
+  BALL_RADIUS: 20,
 
   // Ball flight targets — goal scaleX 3.8 → ~395px wide, center 384,
   // left edge ≈186, right ≈582. Thirds at ~249 / 384 / 519.
   BALL_TARGET_LEFT: { x: 249, y: 410 },
   BALL_TARGET_CENTER: { x: 384, y: 410 },
   BALL_TARGET_RIGHT: { x: 519, y: 410 },
+
+  // Ground markings (penalty box + goal line + spot) drawn as vector lines
+  // directly on playerArea, so they scale with the screen like everything
+  // else in this container — no resize-time recomputation needed. The goal
+  // posts/net themselves are the real sprite (LAYOUT.GOAL); this box just
+  // frames the goal mouth + keeper + spot, like a real penalty area.
+  PITCH_BOX: { x: 150, y: 488, w: 468, h: 200 },
+  PITCH_LINE_COLOR: 0xffffff,
+  PENALTY_SPOT_RADIUS: 5,
 
   // Side picker — three zones spanning the full goal mouth width (395px).
   // Each zone 118px wide; together they cover 3×118=354px centred on 384.
@@ -131,6 +144,30 @@ const LAYOUT = {
   WINNER_TEXT: { x: 384, y: 490 },
   FINAL_SCORE_TEXT: { x: 384, y: 580 },
 } as const;
+
+// ─── First-time tutorial ────────────────────────────────────────────────────
+// Auto-opens the same rules popup HomeScreen's "?" button shows, once, the
+// first time the player ever reaches a penalty shootout — covers onboarding
+// for shooting, keeper saves, and active/passive card rules without a new
+// in-screen tooltip system.
+
+const PENALTY_TUTORIAL_SEEN_KEY = "penaltyWC.seenPenaltyTutorial";
+
+function hasSeenPenaltyTutorial(): boolean {
+  try {
+    return localStorage.getItem(PENALTY_TUTORIAL_SEEN_KEY) === "true";
+  } catch {
+    return false;
+  }
+}
+
+function markPenaltyTutorialSeen(): void {
+  try {
+    localStorage.setItem(PENALTY_TUTORIAL_SEEN_KEY, "true");
+  } catch {
+    // private browsing / storage disabled — just skip persisting
+  }
+}
 
 // ─── Pending slots (BigPool / no-arg prepare() pattern) ────────────────────────
 
@@ -214,7 +251,7 @@ export class PenaltyScreen extends Container {
   private _onMatchComplete: (() => void) | null = null;
   private _strikerChar: LayeredCharacter | null = null;
   private _keeperChar: LayeredCharacter | null = null;
-  private _ballSprite!: Graphics;
+  private _ballSprite!: Sprite;
 
   // Screen-space stadium background (grass + crowd grid + central wall). Laid
   // out from the real renderer size so the pixel-art tiles instead of stretching.
@@ -356,6 +393,13 @@ export class PenaltyScreen extends Container {
     if (this._presenter) {
       this._render(this._presenter.viewModel);
     }
+    // engine.navigation (and its .app) are unset in tests/non-browser
+    // environments (no real CreationEngine.init() call there) — skip rather
+    // than reject.
+    if (!hasSeenPenaltyTutorial() && engine.navigation?.app) {
+      markPenaltyTutorialSeen();
+      void engine.navigation.presentPopup(TutorialScreen);
+    }
   }
 
   async hide(): Promise<void> {
@@ -475,7 +519,8 @@ export class PenaltyScreen extends Container {
       LAYOUT.CONFIRM_BTN.y,
       LAYOUT.CONFIRM_BTN.w,
       LAYOUT.CONFIRM_BTN.h,
-      0x228822,
+      0xf5b73d,
+      { textColor: 0x17171f, border: true },
     );
     this.confirmButton.on("pointerdown", () => {
       if (this._presenter?.viewModel.canConfirm) {
@@ -549,19 +594,134 @@ export class PenaltyScreen extends Container {
 
   private _buildScoreDisplay(): Container {
     const panel = new Container();
+
+    // Ads-left badge — same gold/ink pixel-art style as the CONFIRM button.
+    const BADGE_W = 96;
+    const BADGE_H = 30;
+    const badge = new Container();
+    badge.x = 10;
+    badge.y = 10;
+
+    const badgeBg = new Graphics();
+    const INK = 0x070b14;
+    badgeBg.rect(0, 0, BADGE_W, BADGE_H).fill(0xf5b73d);
+    badgeBg.rect(0, 0, BADGE_W, 2).fill(INK);
+    badgeBg.rect(0, BADGE_H - 2, BADGE_W, 2).fill(INK);
+    badgeBg.rect(0, 0, 2, BADGE_H).fill(INK);
+    badgeBg.rect(BADGE_W - 2, 0, 2, BADGE_H).fill(INK);
+    badge.addChild(badgeBg);
+
     this._adsLeftTxt = new Text({
       text: "ADS: 0",
-      style: { fill: 0xffffff, fontFamily: "Minecraft", fontSize: 16 },
+      style: { fill: 0x17171f, fontFamily: "Minecraft", fontSize: 14 },
     });
-    this._adsLeftTxt.x = 10;
-    this._adsLeftTxt.y = 10;
-    panel.addChild(this._adsLeftTxt);
+    this._adsLeftTxt.anchor.set(0.5);
+    this._adsLeftTxt.x = BADGE_W / 2;
+    this._adsLeftTxt.y = BADGE_H / 2;
+    badge.addChild(this._adsLeftTxt);
+
+    panel.addChild(badge);
+
+    // Settings/tutorial — same icons and behavior as HomeScreen's, so the
+    // player can read the rules or fix the volume without leaving the kick.
+    this._buildSettingsButton(panel);
+    this._buildTutorialButton(panel);
 
     return panel;
   }
 
+  private _buildSettingsButton(panel: Container): void {
+    const cx = LAYOUT.CANVAS_W - 26;
+    const cy = LAYOUT.CANVAS_H - 26;
+    const gear = new Graphics();
+
+    const TEETH = 8;
+    const outerR = 10;
+    const toothW = 4;
+    const toothH = 4;
+    for (let i = 0; i < TEETH; i++) {
+      const angle = (i / TEETH) * Math.PI * 2;
+      const tx = cx + Math.cos(angle) * outerR;
+      const ty = cy + Math.sin(angle) * outerR;
+      gear
+        .rect(tx - toothW / 2, ty - toothH / 2, toothW, toothH)
+        .fill(0xf6eccf);
+    }
+    gear.circle(cx, cy, outerR - 2).fill(0xf6eccf);
+    gear.circle(cx, cy, 4).fill(0x0a1120);
+
+    gear.eventMode = "static";
+    gear.cursor = "pointer";
+    gear.hitArea = new Rectangle(cx - 18, cy - 18, 36, 36);
+    gear.on("pointerdown", () => {
+      sfx.play(SOUND_ALIASES.buttonClick);
+      void engine.navigation.presentPopup(SettingsScreen);
+    });
+    gear.on("pointerup", (e) => e.stopPropagation());
+
+    panel.addChild(gear);
+  }
+
+  private _buildTutorialButton(panel: Container): void {
+    const cx = LAYOUT.CANVAS_W - 60;
+    const cy = LAYOUT.CANVAS_H - 26;
+
+    const icon = new Graphics();
+    icon.circle(cx, cy, 11).fill(0xf6eccf);
+    icon.eventMode = "static";
+    icon.cursor = "pointer";
+    icon.hitArea = new Rectangle(cx - 18, cy - 18, 36, 36);
+    icon.on("pointerdown", () => {
+      sfx.play(SOUND_ALIASES.buttonClick);
+      void engine.navigation.presentPopup(TutorialScreen);
+    });
+    icon.on("pointerup", (e) => e.stopPropagation());
+    panel.addChild(icon);
+
+    const mark = new Text({
+      text: "?",
+      style: { fontFamily: "Minecraft", fontSize: 14, fill: 0x0a1120 },
+    });
+    mark.anchor.set(0.5);
+    mark.x = cx;
+    mark.y = cy + 1;
+    panel.addChild(mark);
+  }
+
   private _buildPlayerArea(): Container {
     const panel = new Container();
+
+    // Ground markings: penalty box + goal line + spot. Drawn once in virtual
+    // coords — playerArea's own scale handles resizing, so these never need
+    // per-resize recomputation like the screen-space environment does.
+    // zIndex -1 keeps them behind the goal sprite/ball/characters once
+    // _installSprites turns sortableChildren on.
+    const pitchLines = new Graphics();
+    pitchLines.zIndex = -1;
+    pitchLines
+      .rect(
+        LAYOUT.PITCH_BOX.x,
+        LAYOUT.PITCH_BOX.y,
+        LAYOUT.PITCH_BOX.w,
+        LAYOUT.PITCH_BOX.h,
+      )
+      .stroke({ color: LAYOUT.PITCH_LINE_COLOR, width: 3, alpha: 0.7 });
+    // Goal line redrawn bolder on top of the box's top edge — "la meta".
+    pitchLines
+      .moveTo(LAYOUT.PITCH_BOX.x, LAYOUT.PITCH_BOX.y)
+      .lineTo(LAYOUT.PITCH_BOX.x + LAYOUT.PITCH_BOX.w, LAYOUT.PITCH_BOX.y)
+      .stroke({ color: LAYOUT.PITCH_LINE_COLOR, width: 4, alpha: 0.85 });
+    // Touchline at the box's same y, crossing the full canvas width — hints
+    // at the corners sitting just off-screen, like the box is a close-up
+    // crop of a bigger pitch.
+    pitchLines
+      .moveTo(0, LAYOUT.PITCH_BOX.y)
+      .lineTo(LAYOUT.CANVAS_W, LAYOUT.PITCH_BOX.y)
+      .stroke({ color: LAYOUT.PITCH_LINE_COLOR, width: 3, alpha: 0.7 });
+    pitchLines
+      .circle(LAYOUT.BALL_POS.x, LAYOUT.BALL_POS.y, LAYOUT.PENALTY_SPOT_RADIUS)
+      .fill({ color: LAYOUT.PITCH_LINE_COLOR, alpha: 0.85 });
+    panel.addChild(pitchLines);
 
     // Goal frame (wireframe rectangle at top, like the mockup)
     const goalFrame = new Graphics();
@@ -594,12 +754,12 @@ export class PenaltyScreen extends Container {
     keeperRect.label = "keeper-fallback";
     panel.addChild(keeperRect);
 
-    // Ball (placeholder circle)
-    this._ballSprite = new Graphics();
-    this._ballSprite
-      .circle(0, 0, LAYOUT.BALL_RADIUS)
-      .fill({ color: 0xffffff })
-      .stroke({ color: 0x66ddff, width: 2 });
+    // Ball (placeholder; swapped for the real ball.goal sprite in _installSprites)
+    this._ballSprite = new Sprite(Texture.WHITE);
+    this._ballSprite.label = "ball-fallback";
+    this._ballSprite.anchor.set(0.5);
+    this._ballSprite.width = LAYOUT.BALL_RADIUS * 4;
+    this._ballSprite.height = LAYOUT.BALL_RADIUS * 4;
     this._ballSprite.x = LAYOUT.BALL_POS.x;
     this._ballSprite.y = LAYOUT.BALL_POS.y;
     panel.addChild(this._ballSprite);
@@ -692,7 +852,10 @@ export class PenaltyScreen extends Container {
   private _buildDarkenOverlay(): Container {
     const panel = new Container();
     const bg = new Graphics();
-    bg.rect(0, 0, LAYOUT.CANVAS_W, LAYOUT.CANVAS_H).fill({ color: 0x000000, alpha: 0.78 });
+    bg.rect(0, 0, LAYOUT.CANVAS_W, LAYOUT.CANVAS_H).fill({
+      color: 0x000000,
+      alpha: 0.78,
+    });
     panel.addChild(bg);
     return panel;
   }
@@ -840,7 +1003,10 @@ export class PenaltyScreen extends Container {
   private _buildResultPanel(): Container {
     const panel = new Container();
     const bg = new Graphics();
-    bg.rect(0, 0, LAYOUT.CANVAS_W, LAYOUT.CANVAS_H).fill({ color: 0x111111, alpha: 0.85 });
+    bg.rect(0, 0, LAYOUT.CANVAS_W, LAYOUT.CANVAS_H).fill({
+      color: 0x111111,
+      alpha: 0.85,
+    });
     panel.addChild(bg);
 
     this._resultTxt = new Text({
@@ -853,12 +1019,13 @@ export class PenaltyScreen extends Container {
     panel.addChild(this._resultTxt);
 
     const nextBtn = this._makeButton(
-      "Next",
+      "NEXT",
       LAYOUT.NEXT_BTN.x,
       LAYOUT.NEXT_BTN.y,
       LAYOUT.NEXT_BTN.w,
       LAYOUT.NEXT_BTN.h,
-      0x336699,
+      0xf5b73d,
+      { textColor: 0x17171f, border: true },
     );
     nextBtn.on("pointerdown", () => this._presenter?.advanceTurn());
     panel.addChild(nextBtn);
@@ -932,12 +1099,13 @@ export class PenaltyScreen extends Container {
   }
 
   private _installSprites(bundle: PenaltySpriteBundle): void {
-    // Remove fallback placeholders (goal wireframe + striker/keeper outlines)
+    // Remove fallback placeholders (goal wireframe + striker/keeper outlines + ball)
     for (const child of this.playerArea.children.slice()) {
       if (
         child.label === "goal-fallback" ||
         child.label === "striker-fallback" ||
-        child.label === "keeper-fallback"
+        child.label === "keeper-fallback" ||
+        child.label === "ball-fallback"
       ) {
         this.playerArea.removeChild(child);
       }
@@ -961,7 +1129,14 @@ export class PenaltyScreen extends Container {
     // Use sortableChildren so ball zIndex can be swapped at runtime based on result.
     this.playerArea.sortableChildren = true;
 
-    this._ballSprite.zIndex = 1;
+    // Real ball sprite (32×32 native) — scaled to LAYOUT.BALL_RADIUS*2 diameter.
+    const ball = new Sprite(bundle.ball);
+    ball.anchor.set(0.5);
+    ball.scale.set((LAYOUT.BALL_RADIUS * 2) / bundle.ball.width);
+    ball.x = LAYOUT.BALL_POS.x;
+    ball.y = LAYOUT.BALL_POS.y;
+    ball.zIndex = 1;
+    this._ballSprite = ball;
     this.playerArea.addChild(this._ballSprite);
 
     this._keeperChar = new LayeredCharacter(bundle.goalkeeper);
@@ -1123,7 +1298,7 @@ export class PenaltyScreen extends Container {
     // Scoreboard panel — left side of the wall (clear of the centred goal sprite),
     // sized as a fraction of the screen width.
     if (this._scorePanel) {
-      const panelW = w * 0.13;
+      const panelW = w * 0.17;
       const panelScale = panelW / 164;
       this._scorePanel.scale.set(panelScale);
       this._scorePanel.x = w * 0.03;
@@ -1748,6 +1923,7 @@ export class PenaltyScreen extends Container {
 
     this._ballSprite.x = LAYOUT.BALL_POS.x;
     this._ballSprite.y = LAYOUT.BALL_POS.y;
+    this._ballSprite.rotation = 0;
     if (this._ballSprite.zIndex !== undefined) this._ballSprite.zIndex = 1;
 
     this._applyRoleColors(this._currentHumanRole);
@@ -1931,6 +2107,7 @@ export class PenaltyScreen extends Container {
     w: number,
     h: number,
     color: number,
+    options?: { textColor?: number; border?: boolean },
   ): Container {
     const btn = new Container();
     btn.x = x;
@@ -1941,12 +2118,20 @@ export class PenaltyScreen extends Container {
 
     const bg = new Graphics();
     bg.rect(0, 0, w, h).fill({ color });
+    if (options?.border) {
+      // Same pixel-art ink border used by HomeScreen's gold CTA button.
+      const INK = 0x070b14;
+      bg.rect(0, 0, w, 2).fill(INK);
+      bg.rect(0, h - 2, w, 2).fill(INK);
+      bg.rect(0, 0, 2, h).fill(INK);
+      bg.rect(w - 2, 0, 2, h).fill(INK);
+    }
     btn.addChild(bg);
 
     const txt = new Text({
       text: label,
       style: {
-        fill: 0xffffff,
+        fill: options?.textColor ?? 0xffffff,
         fontFamily: "Minecraft",
         fontSize: 18,
         align: "center",

@@ -34,6 +34,8 @@ export interface PenaltySpriteBundle {
   striker: LayeredFrames;
   goalkeeper: LayeredFrames;
   goal: Texture;
+  /** Penalty-kick ball (32×32 native), spun via rotation during ball flight. */
+  ball: Texture;
   stands: StandLayers;
   /** Two 32×32 frames sliced from coin.goal.png: [0]=goal, [1]=miss. */
   coinFrames: [Texture, Texture];
@@ -89,6 +91,7 @@ const GOALKEEPER_LAYERS: LayerSource[] = [
 ];
 
 const GOAL_TEXTURE_URL = `${SPRITES_BASE}/environment/soccer.goal.png`;
+const BALL_TEXTURE_URL = `${SPRITES_BASE}/environment/ball.goal.png`;
 const COIN_TEXTURE_URL = `${SPRITES_BASE}/environment/coin.goal.png`;
 const SCORE_PANEL_URL = `${SPRITES_BASE}/environment/score.panel.png`;
 const SCORE_RESULTADO_URL = `${SPRITES_BASE}/environment/score.resultado.png`;
@@ -113,6 +116,7 @@ export async function loadPenaltySprites(): Promise<PenaltySpriteBundle> {
     striker,
     goalkeeper,
     goal,
+    ball,
     coin,
     wall,
     fanBackground,
@@ -129,6 +133,7 @@ export async function loadPenaltySprites(): Promise<PenaltySpriteBundle> {
     loadCharacter(STRIKER_LAYERS),
     loadCharacter(GOALKEEPER_LAYERS),
     Assets.load<Texture>(GOAL_TEXTURE_URL),
+    Assets.load<Texture>(BALL_TEXTURE_URL),
     Assets.load<Texture>(COIN_TEXTURE_URL),
     Assets.load<Texture>(STAND_WALL_URL),
     Assets.load<Texture>(FAN_BACKGROUND_URL),
@@ -147,6 +152,7 @@ export async function loadPenaltySprites(): Promise<PenaltySpriteBundle> {
 
   for (const tex of [
     goal,
+    ball,
     wall,
     fanBackground,
     fanBody,
@@ -171,6 +177,7 @@ export async function loadPenaltySprites(): Promise<PenaltySpriteBundle> {
     striker,
     goalkeeper,
     goal,
+    ball,
     stands: {
       wall,
       fanBackground,
