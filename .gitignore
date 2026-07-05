@@ -23,7 +23,6 @@ dist-ssr
 *.sln
 *.sw?
 
-public/assets
 .assetpack
 src/manifest.json
 .audio-originals-backup

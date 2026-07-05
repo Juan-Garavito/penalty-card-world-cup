@@ -1,0 +1,29 @@
+{ "frames": {
+   "score.panel.aseprite": {
+    "frame": { "x": 0, "y": 0, "w": 164, "h": 82 },
+    "rotated": false,
+    "trimmed": false,
+    "spriteSourceSize": { "x": 0, "y": 0, "w": 164, "h": 82 },
+    "sourceSize": { "w": 164, "h": 82 },
+    "duration": 100
+   }
+ },
+ "meta": {
+  "app": "https://www.aseprite.org/",
+  "version": "1.3.17.2-x64",
+  "image": "score.panel.png",
+  "format": "RGBA8888",
+  "size": { "w": 164, "h": 82 },
+  "scale": "1",
+  "frameTags": [
+  ],
+  "layers": [
+   { "name": "Panel", "opacity": 255, "blendMode": "normal" },
+   { "name": "Resultado", "opacity": 255, "blendMode": "normal" },
+   { "name": "Equipo1", "opacity": 255, "blendMode": "normal" },
+   { "name": "Equipo2", "opacity": 255, "blendMode": "normal" }
+  ],
+  "slices": [
+  ]
+ }
+}

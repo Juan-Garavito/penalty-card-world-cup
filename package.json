@@ -12,6 +12,7 @@
     "build:google": "cross-env VITE_AD_SDK=google VITE_GOOGLE_AD_CLIENT=pub-7201258846002486 vite build",
     "lint": "eslint .",
     "dev": "vite",
+    "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest"
   },
