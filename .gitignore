@@ -24,5 +24,6 @@ dist-ssr
 *.sw?
 
 .assetpack
+.assetpack-output
 src/manifest.json
 .audio-originals-backup
