@@ -1,5 +1,5 @@
 /**
- * Single integration point for portal ad SDKs (Poki, CrazyGames).
+ * Single integration point for portal ad SDKs (Poki, CrazyGames, Google H5 Games Ads).
  * Dispatches to the provider selected at build time via `AD_SDK_PROVIDER`
  * (see ../config/adSdk.ts), falling back to the in-game mock ad modal
  * when the selected SDK isn't present (e.g. local dev).
@@ -25,8 +25,14 @@ import {
   crazyGamesMidgameAd,
   isCrazyGamesAvailable,
 } from "./CrazyGamesLifecycle.ts";
+import {
+  isGoogleAdsAvailable,
+  googleAdsInit,
+  googleAdsMidgameAd,
+} from "./GoogleAdsLifecycle.ts";
 import { PokiAdService } from "./PokiAdService.ts";
 import { CrazyGamesAdService } from "./CrazyGamesAdService.ts";
+import { GoogleAdsService } from "./GoogleAdsService.ts";
 import { MockAdService } from "./MockAdService.ts";
 import { AdModalScreen } from "../screens/AdModalScreen.ts";
 
@@ -34,6 +40,7 @@ import { AdModalScreen } from "../screens/AdModalScreen.ts";
 export async function adInit(): Promise<void> {
   if (AD_SDK_PROVIDER === "crazygames") return crazyGamesInit();
   if (AD_SDK_PROVIDER === "poki") return pokiInit();
+  if (AD_SDK_PROVIDER === "google") googleAdsInit();
 }
 
 /** Call once, right when the asset-loading phase begins (after adInit()). */
@@ -63,6 +70,7 @@ export function adGameplayStop(): void {
 export async function adBreak(): Promise<void> {
   if (AD_SDK_PROVIDER === "crazygames") return crazyGamesMidgameAd();
   if (AD_SDK_PROVIDER === "poki") return pokiCommercialBreak();
+  if (AD_SDK_PROVIDER === "google") return googleAdsMidgameAd();
 }
 
 /** Returns the rewarded-ad adapter for the active provider, or the mock modal as a fallback. */
@@ -72,6 +80,9 @@ export function createAdService(navigation: Navigation): IAdService {
   }
   if (AD_SDK_PROVIDER === "poki" && isPokiAvailable()) {
     return new PokiAdService();
+  }
+  if (AD_SDK_PROVIDER === "google" && isGoogleAdsAvailable()) {
+    return new GoogleAdsService();
   }
   return new MockAdService(() => new AdModalScreen(), navigation);
 }

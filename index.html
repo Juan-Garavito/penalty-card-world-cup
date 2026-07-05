@@ -11,6 +11,16 @@
     <title>PixiJS - Template</title>
     <script src="https://game-cdn.poki.com/scripts/v2/poki-sdk.js"></script>
     <script src="https://sdk.crazygames.com/crazygames-sdk-v3.js"></script>
+    <!-- Google Ad Placement API (H5 Games Ads). Loaded unconditionally, same as the
+         Poki/CrazyGames tags above — it only does anything when VITE_AD_SDK=google. -->
+    <script async
+        data-ad-frequency-hint="30s"
+        src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-%VITE_GOOGLE_AD_CLIENT%"
+        crossorigin="anonymous"></script>
+    <script>
+        window.adsbygoogle = window.adsbygoogle || [];
+        window.adBreak = window.adConfig = function (o) { window.adsbygoogle.push(o); };
+    </script>
 </head>
 
 <body>

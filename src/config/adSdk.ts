@@ -7,13 +7,14 @@
  *
  *   - "poki"       → use the Poki HTML5 SDK (game-cdn.poki.com)
  *   - "crazygames" → use the CrazyGames HTML5 SDK (sdk.crazygames.com)
+ *   - "google"     → use Google's Ad Placement API (H5 Games Ads), see index.html
  *   - "none"       → skip portal SDKs entirely; use the in-game mock ad modal
  */
-export type AdSdkProvider = "poki" | "crazygames" | "none";
+export type AdSdkProvider = "poki" | "crazygames" | "google" | "none";
 
 function resolveAdSdkProvider(): AdSdkProvider {
   const raw = (import.meta.env.VITE_AD_SDK ?? "poki").toLowerCase();
-  if (raw === "crazygames" || raw === "none") return raw;
+  if (raw === "crazygames" || raw === "google" || raw === "none") return raw;
   return "poki";
 }
 
