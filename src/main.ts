@@ -1,3 +1,4 @@
+import { inject, track } from "@vercel/analytics";
 import { engine } from "./engine/instance.ts";
 import { watchOrientation } from "./engine/utils/orientationGuard.ts";
 import "@pixi/sound";
@@ -91,6 +92,7 @@ const NEXT_PHASE: Partial<Record<TournamentPhase, TournamentPhase>> = {
 };
 
 watchOrientation();
+inject();
 
 (async () => {
   await adInit();
@@ -182,6 +184,10 @@ watchOrientation();
       sfx.play(SOUND_ALIASES.winner);
       bgm.pause();
     }
+    track("tournament_completed", {
+      result: "eliminated",
+      championId: champion?.id ?? null,
+    });
     setPendingViewOnlyKnockout(simulated, champion, _tournament.playerTeam.id, () => void goToHome());
     await engine.navigation.showScreen(KnockoutBracketScreen);
   }
@@ -202,6 +208,13 @@ watchOrientation();
     // Final (win or lose): show the champion banner inline — no extra screens needed
     const isFinal = phase === "final";
     const champion = isFinal ? round.matches[0]?.winner ?? undefined : undefined;
+
+    if (isFinal) {
+      track("tournament_completed", {
+        result: champion?.id === _tournament.playerTeam.id ? "champion" : "runner_up",
+        championId: champion?.id ?? null,
+      });
+    }
 
     setPendingMatchResults({
       matchGroups: [{ groupId: PHASE_LABELS[phase], matches: round.matches }],
@@ -345,6 +358,15 @@ watchOrientation();
               : aiGoals > humanGoals
                 ? opponentTeam
                 : null;
+        track("match_played", {
+          phase: match.phase,
+          result:
+            vm.phase === "draw"
+              ? "draw"
+              : match.winner === playerTeam
+                ? "win"
+                : "loss",
+        });
       }
     });
 
@@ -378,6 +400,7 @@ watchOrientation();
   async function goToTeamSelection() {
     setPendingOnSelect(async (teamId: string) => {
       bgm.resume();
+      track("team_selected", { teamId });
       _tournament = createTournament(teamId);
       const adAdapter = createAdService(engine.navigation);
       _adRewardService = new AdRewardService(adAdapter, _tournament);

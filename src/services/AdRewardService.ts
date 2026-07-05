@@ -1,3 +1,4 @@
+import { track } from "@vercel/analytics";
 import type { IAdService } from "./IAdService.ts";
 import type { Tournament } from "../entities/Tournament/Tournament.ts";
 
@@ -20,6 +21,7 @@ export class AdRewardService {
   async requestReward(): Promise<AdRewardResult> {
     if (!this.canUse()) return "exhausted";
     const granted = await this.adapter.showAd();
+    track("ad_watched", { granted });
     if (granted) this.tournament.adRewardUsesLeft--;
     return granted ? "granted" : "denied";
   }
