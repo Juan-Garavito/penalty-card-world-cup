@@ -1,64 +1,6 @@
-import { Goalkeeper } from "../Footballers/Goalkeeper.ts";
-import { Striker } from "../Footballers/Striker.ts";
-import { IPlayer } from "./IPlayer.ts";
-import { TurnContext } from "./TurnContext.ts";
-import { PlayerDecision } from "./PlayerDecision.ts";
-import { PassiveCard } from "../Cards/passive/PassiveCard.ts";
-import { ActiveCard } from "../Cards/active/ActiveCard.ts";
-import { MissingSelectionError } from "./errors/MissingSelectionError.ts";
-import { MissingSideError } from "./errors/MissingSideError.ts";
-import { Side } from "./Side.ts";
+import { BufferedDecisionPlayer } from "./BufferedDecisionPlayer.ts";
 
-export class HumanPlayer implements IPlayer {
-  readonly id: string;
-  readonly goalkeeper: Goalkeeper;
-  readonly striker: Striker;
-
-  private pendingSelection: PassiveCard | null = null;
-  private pendingActive: ActiveCard | null = null;
-  private pendingSide: Side | null = null;
-
-  constructor(id: string, goalkeeper: Goalkeeper, striker: Striker) {
-    this.id = id;
-    this.goalkeeper = goalkeeper;
-    this.striker = striker;
-  }
-
-  setPendingSelection(card: PassiveCard): void {
-    this.pendingSelection = card;
-  }
-
-  setPendingActive(card: ActiveCard | null): void {
-    this.pendingActive = card;
-  }
-
-  // SCEN-HUMAN-SIDE-SET: parallel to setPendingActive
-  setPendingSide(side: Side | null): void {
-    this.pendingSide = side;
-  }
-
-  decide(_context: TurnContext): PlayerDecision {
-    if (this.pendingSelection === null) {
-      throw new MissingSelectionError();
-    }
-    // SCEN-HUMAN-SIDE-MISSING: check pendingSide after pendingSelection
-    if (this.pendingSide === null) {
-      throw new MissingSideError();
-    }
-    const chosen = this.pendingSelection;
-    const active = this.pendingActive;
-    const side = this.pendingSide;
-    this.pendingSelection = null;
-    this.pendingActive = null;
-    this.pendingSide = null; // SCEN-HUMAN-SIDE-CLEARED
-    return { chosenCard: chosen, activePlayed: active ?? undefined, side };
-  }
-
-  resetForNewMatch(): void {
-    this.striker.activeCards.forEach((c) => c.reset());
-    this.goalkeeper.activeCards.forEach((c) => c.reset());
-    this.pendingSelection = null;
-    this.pendingActive = null;
-    this.pendingSide = null; // clear side buffer
-  }
-}
+// Local human input, buffered from UI selections. See
+// BufferedDecisionPlayer for the shared buffer-then-read decide() pattern
+// (also used by RemotePlayer for networked peer input).
+export class HumanPlayer extends BufferedDecisionPlayer {}
