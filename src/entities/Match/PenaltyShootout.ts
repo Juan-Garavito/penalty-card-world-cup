@@ -5,10 +5,22 @@ import { TurnOutcome } from "./TurnOutcome.ts";
 import { MatchAlreadyOverError } from "./errors/MatchAlreadyOverError.ts";
 import { InvalidTransitionError } from "./errors/InvalidTransitionError.ts";
 import { PassiveCard } from "../Cards/passive/PassiveCard.ts";
+import { ActiveCard } from "../Cards/active/ActiveCard.ts";
 import { PenaltyResolver } from "./PenaltyResolver.ts";
 import { MathRandomRng } from "./MathRandomRng.ts";
-import { ResolutionOutcome } from "./ResolutionOutcome.ts";
+import { ResolutionOutcome, ResolutionEvidence } from "./ResolutionOutcome.ts";
 import { TurnContext } from "../Players/TurnContext.ts";
+
+// Structural view of a player's active-card pools. HumanPlayer, IAPlayer, and
+// RemotePlayer all expose `striker`/`goalkeeper` with `activeCards`, but
+// IPlayer intentionally does not declare them — card storage is meant to stay
+// an implementation detail behind decide(). applyRemoteOutcome() is the one
+// exception: unlike advance(), it never calls decide(), so it must reach in
+// directly to replay the ActiveCard state changes carried by evidence.
+interface PlayerWithActiveCards {
+  readonly striker?: { readonly activeCards: ReadonlyArray<ActiveCard> };
+  readonly goalkeeper?: { readonly activeCards: ReadonlyArray<ActiveCard> };
+}
 
 export class PenaltyShootout {
   private _state: MatchState;
@@ -130,15 +142,9 @@ export class PenaltyShootout {
     const strikerDecision = shooterPlayer.decide(shooterCtx);
     const goalkeeperDecision = goalkeeperPlayer.decide(goalkeeperCtx);
 
-    // Call tickShot on all passive cards of both players (existing behavior)
-    this.allPassiveCards().forEach((card) => card.tickShot());
-
-    // Transition to ResolvingShot
-    this._state = {
-      phase: "ResolvingShot",
-      shooterId,
-      goalkeeperId,
-    };
+    // Tick passive cards and transition to ResolvingShot (shared with
+    // applyRemoteOutcome() via _beginResolvingShot()).
+    this._beginResolvingShot();
 
     // REQ-INTEGRATION-002: resolve the shot
     const outcome = this.resolver.resolve(strikerDecision, goalkeeperDecision);
@@ -152,32 +158,89 @@ export class PenaltyShootout {
 
   // REQ-REMOTE-OUTCOME-001: additive guest-side sync — applies a host-resolved
   // turn's score/turn/phase WITHOUT calling advance() or PenaltyResolver.
-  // Mirrors advance() minus the decide()/resolve() calls; transitions to
-  // "ResolvingShot" first because submitTurnOutcome() rejects the
-  // "WaitingForDecisions" phase.
+  // Mirrors advance() minus the decide()/resolve() calls; also replays the
+  // ActiveCard.activate()/markUsed() side effects PenaltyResolver applied on
+  // the host (see _applyCardStateEffects), using outcome.evidence as the
+  // source of truth, so canActivate() stays in sync across peers.
+  //
+  // NOTE: assumes the caller (network layer) guarantees each resolved
+  // outcome is applied exactly once per turn — this method has no
+  // idempotency/duplicate-message guard. That belongs to the WS relay
+  // protocol, not yet designed (deferred to PR4).
   applyRemoteOutcome(outcome: ResolutionOutcome): void {
     if (this._state.phase === "GameOver") {
       throw new MatchAlreadyOverError();
     }
 
+    const { shooterId, goalkeeperId } = this._beginResolvingShot();
+
+    this._applyCardStateEffects(outcome.evidence, shooterId, goalkeeperId);
+
+    // REQ-INTEGRATION-003: store last outcome for UI
+    this._lastOutcome = outcome;
+
+    this.submitTurnOutcome({ goal: outcome.goal });
+  }
+
+  // Shared by advance() and applyRemoteOutcome(): reads the current
+  // shooter/goalkeeper ids off state, ticks all passive cards, and
+  // transitions to "ResolvingShot" (required before submitTurnOutcome(),
+  // which rejects the "WaitingForDecisions" phase).
+  private _beginResolvingShot(): {
+    shooterId: string;
+    goalkeeperId: string;
+  } {
     const shooterId = (this._state as { shooterId: string }).shooterId;
     const goalkeeperId = (this._state as { goalkeeperId: string }).goalkeeperId;
 
-    // Call tickShot on all passive cards of both players (mirrors advance())
     this.allPassiveCards().forEach((card) => card.tickShot());
 
-    // Transition to ResolvingShot — required: submitTurnOutcome rejects
-    // "WaitingForDecisions"
     this._state = {
       phase: "ResolvingShot",
       shooterId,
       goalkeeperId,
     };
 
-    // REQ-INTEGRATION-003: store last outcome for UI
-    this._lastOutcome = outcome;
+    return { shooterId, goalkeeperId };
+  }
 
-    this.submitTurnOutcome({ goal: outcome.goal });
+  // REQ-REMOTE-OUTCOME-002: replays PenaltyResolver's ActiveCard.activate()/
+  // markUsed() side effects on the guest from outcome.evidence, since the
+  // guest never runs PenaltyResolver locally. A card referenced only in
+  // evidence.nullifiedActives needs no state change here — PenaltyResolver
+  // never calls activate()/markUsed() on a nullified card, only on the
+  // NullifyCard that fired against it (which is itself in activesFired).
+  private _applyCardStateEffects(
+    evidence: ResolutionEvidence,
+    shooterId: string,
+    goalkeeperId: string,
+  ): void {
+    const shooterPlayer =
+      this.playerA.id === shooterId ? this.playerA : this.playerB;
+    const goalkeeperPlayer =
+      this.playerA.id === goalkeeperId ? this.playerA : this.playerB;
+
+    const findActiveCard = (
+      by: "striker" | "goalkeeper",
+      cardId: number,
+    ): ActiveCard | undefined => {
+      const owner = (by === "striker"
+        ? shooterPlayer
+        : goalkeeperPlayer) as unknown as PlayerWithActiveCards;
+      const pool =
+        by === "striker"
+          ? owner.striker?.activeCards
+          : owner.goalkeeper?.activeCards;
+      return pool?.find((card) => card.id === cardId);
+    };
+
+    for (const fired of evidence.activesFired) {
+      findActiveCard(fired.by, fired.cardId)?.activate();
+    }
+
+    for (const consumed of evidence.consumedOnMiss) {
+      findActiveCard(consumed.by, consumed.cardId)?.markUsed();
+    }
   }
 
   submitTurnOutcome(outcome: TurnOutcome): void {

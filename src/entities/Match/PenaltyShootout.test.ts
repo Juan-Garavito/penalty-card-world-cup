@@ -15,6 +15,7 @@ import { Goalkeeper } from "../Footballers/Goalkeeper.ts";
 import { Striker } from "../Footballers/Striker.ts";
 import { CheatingCard } from "../Cards/active/CheatingCard.ts";
 import { IntimidateCard } from "../Cards/active/IntimidateCard.ts";
+import { ActiveCard } from "../Cards/active/ActiveCard.ts";
 import { makeIAStrategyMock } from "../Players/__test-helpers__/makeIAStrategyMock.ts";
 
 // ─── Stub helpers ────────────────────────────────────────────────────────────
@@ -824,5 +825,119 @@ describe("PenaltyShootout.applyRemoteOutcome — guest applies host-resolved out
     if (match.state.phase === "GameOver") {
       expect(match.state.winner).toBe("pA");
     }
+  });
+});
+
+// ─── Review fix 1 — applyRemoteOutcome replays ActiveCard side effects ─────
+// REQ-REMOTE-OUTCOME-002: the guest never runs PenaltyResolver locally, so
+// applyRemoteOutcome() must replay the activate()/markUsed() calls the host's
+// PenaltyResolver made, using outcome.evidence (activesFired/consumedOnMiss)
+// as the source of truth, so canActivate() stays in sync across peers.
+
+function makePlayerWithActives(
+  id: string,
+  strikerActives: ActiveCard[] = [],
+  goalkeeperActives: ActiveCard[] = [],
+): IPlayer & {
+  striker: { activeCards: ActiveCard[] };
+  goalkeeper: { activeCards: ActiveCard[] };
+} {
+  return {
+    id,
+    decide: vi.fn(),
+    resetForNewMatch: vi.fn(),
+    striker: { activeCards: strikerActives },
+    goalkeeper: { activeCards: goalkeeperActives },
+  };
+}
+
+describe("PenaltyShootout.applyRemoteOutcome — replays ActiveCard side effects from evidence (SCEN-REMOTE-OUTCOME-CARDS)", () => {
+  it("activates the shooter's active card referenced in evidence.activesFired (by: striker)", () => {
+    const strikerActive = new CheatingCard(10, "Cheat", "desc", "");
+    // Default construction: shooter=pA, goalkeeper=pB
+    const pA = makePlayerWithActives("pA", [strikerActive], []);
+    const pB = makePlayerWithActives("pB", [], []);
+    const match = new PenaltyShootout(pA, pB, makeCards(), makeCards());
+    const outcome: ResolutionOutcome = {
+      goal: true,
+      evidence: {
+        ...stubEvidence(),
+        activesFired: [{ cardId: 10, by: "striker", effect: "cheat" }],
+      },
+    };
+
+    match.applyRemoteOutcome(outcome);
+
+    expect(strikerActive.canActivate()).toBe(false);
+  });
+
+  it("activates the goalkeeper's active card referenced in evidence.activesFired (by: goalkeeper)", () => {
+    const gkActive = new IntimidateCard(11, "Intimidate", "desc", "");
+    const pA = makePlayerWithActives("pA", [], []);
+    const pB = makePlayerWithActives("pB", [], [gkActive]);
+    const match = new PenaltyShootout(pA, pB, makeCards(), makeCards());
+    const outcome: ResolutionOutcome = {
+      goal: false,
+      evidence: {
+        ...stubEvidence(),
+        activesFired: [{ cardId: 11, by: "goalkeeper", effect: "intimidate" }],
+      },
+    };
+
+    match.applyRemoteOutcome(outcome);
+
+    expect(gkActive.canActivate()).toBe(false);
+  });
+
+  it("marks used (without activating) the striker's active card referenced in evidence.consumedOnMiss", () => {
+    const strikerActive = new CheatingCard(12, "Cheat", "desc", "");
+    const pA = makePlayerWithActives("pA", [strikerActive], []);
+    const pB = makePlayerWithActives("pB", [], []);
+    const match = new PenaltyShootout(pA, pB, makeCards(), makeCards());
+    const outcome: ResolutionOutcome = {
+      goal: true,
+      evidence: {
+        ...stubEvidence(),
+        directGoal: true,
+        sidesMatched: false,
+        consumedOnMiss: [{ cardId: 12, by: "striker" }],
+      },
+    };
+
+    match.applyRemoteOutcome(outcome);
+
+    expect(strikerActive.canActivate()).toBe(false);
+  });
+
+  it("does not touch a card that is not referenced in activesFired or consumedOnMiss", () => {
+    const untouchedStriker = new CheatingCard(13, "Cheat", "desc", "");
+    const untouchedGk = new IntimidateCard(14, "Intimidate", "desc", "");
+    const pA = makePlayerWithActives("pA", [untouchedStriker], []);
+    const pB = makePlayerWithActives("pB", [], [untouchedGk]);
+    const match = new PenaltyShootout(pA, pB, makeCards(), makeCards());
+    const outcome: ResolutionOutcome = {
+      goal: true,
+      evidence: stubEvidence(),
+    };
+
+    match.applyRemoteOutcome(outcome);
+
+    expect(untouchedStriker.canActivate()).toBe(true);
+    expect(untouchedGk.canActivate()).toBe(true);
+  });
+
+  it("does not throw when a referenced cardId is not found in the local pool (defensive no-op)", () => {
+    const pA = makePlayerWithActives("pA", [], []);
+    const pB = makePlayerWithActives("pB", [], []);
+    const match = new PenaltyShootout(pA, pB, makeCards(), makeCards());
+    const outcome: ResolutionOutcome = {
+      goal: true,
+      evidence: {
+        ...stubEvidence(),
+        activesFired: [{ cardId: 999, by: "striker", effect: "cheat" }],
+      },
+    };
+
+    expect(() => match.applyRemoteOutcome(outcome)).not.toThrow();
   });
 });
