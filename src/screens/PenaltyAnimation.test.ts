@@ -200,12 +200,22 @@ describe("PenaltyAnimation — coin spin visibility", () => {
     expect(coin!.visible).toBe(true);
   });
 
-  it("SCEN-PA-COIN-HIDDEN-NO-GK-ACTIVE: coin stays hidden when only striker active fired", () => {
+  it("SCEN-PA-COIN-VISIBLE-STRIKER-CHEATING: coin shows when striker fired Cheating", () => {
     const { ctx, coin } = makeCtx({
       evidence: makeEvidence({
         sidesMatched: true,
         activesFired: [{ cardId: 3, by: "striker", effect: "cheat" }],
       }),
+    });
+    const anim = new PenaltyAnimation(ctx);
+    anim.start();
+    anim.tick(DUEL_END_MS);
+    expect(coin!.visible).toBe(true);
+  });
+
+  it("SCEN-PA-COIN-HIDDEN-NO-ACTIVE: coin stays hidden when no active fired", () => {
+    const { ctx, coin } = makeCtx({
+      evidence: makeEvidence({ sidesMatched: true, activesFired: [] }),
     });
     const anim = new PenaltyAnimation(ctx);
     anim.start();

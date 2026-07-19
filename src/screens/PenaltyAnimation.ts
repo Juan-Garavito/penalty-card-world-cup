@@ -18,7 +18,7 @@ export const ANIM_TIMING = {
   COIN_SPIN_DURATION: 1200, // total coin-flip animation duration (ms)
   COIN_FLIP_INTERVAL: 80,   // frame alternation interval during fast spin (ms)
   COIN_SPIN_SETTLE_MS: 400, // tail period showing final frame before end-beat
-  CLASH_DURATION: 600,      // card-clash phase after coin lands (Intimidate only)
+  CLASH_DURATION: 600,      // card-clash phase after coin lands (Intimidate or Cheating)
   END_BEAT_DURATION: 400,
   DARKEN_FADE_DURATION: 200, // fade-in for the post-kick darken overlay (direct-goal path)
 };
@@ -306,14 +306,10 @@ export class PenaltyAnimation {
         if (this.ctx.coin) this.ctx.coin.visible = false;
         this.ctx.onCoinEnd?.();
         const coinEndMs = this._coinPhaseStartMs + ANIM_TIMING.COIN_SPIN_DURATION;
-        // For Intimidate: clash happens AFTER coin lands
-        if (this._intimidateFired()) {
-          this._clashStartMs = coinEndMs;
-          this.phase = "card-clash";
-        } else {
-          this._endBeatStartMs = coinEndMs;
-          this.phase = "end-beat";
-        }
+        // Coin-spin is only entered when an active rolled the dice, so it's
+        // always followed by the clash — happens AFTER coin lands.
+        this._clashStartMs = coinEndMs;
+        this.phase = "card-clash";
       } else if (coinElapsed < settleStart) {
         const frame = (Math.floor(coinElapsed / ANIM_TIMING.COIN_FLIP_INTERVAL) % 2) as 0 | 1;
         this.ctx.coin?.setFrame(frame);
@@ -373,7 +369,7 @@ export class PenaltyAnimation {
 
     const humanRestX = this.ctx.humanCardRestX;
     const aiRestX = this.ctx.aiCardRestX;
-    const isIntimidate = this._intimidateFired();
+    const activeRolled = this._activeRolled();
 
     // Phase 0–500ms: slide-in (ease-out cubic), alpha 0→1 in first 200ms
     if (duelElapsed <= 500) {
@@ -388,15 +384,16 @@ export class PenaltyAnimation {
       }
     }
 
-    // Phase 500ms+: hold at rest — for Intimidate the coin spins and then
-    // card-clash phase handles the actual clash after the coin lands.
+    // Phase 500ms+: hold at rest — when an active rolled the dice (Intimidate or
+    // Cheating) the coin spins and then card-clash phase handles the actual clash
+    // after the coin lands.
     if (duelElapsed > 500) {
       if (human && duelElapsed <= 600) { human.x = humanRestX; human.alpha = 1; }
       if (ai && duelElapsed <= 600) { ai.x = aiRestX; ai.alpha = 1; }
     }
 
-    // For non-Intimidate: clash starts at 600ms within card-duel
-    if (!isIntimidate && duelElapsed > 600) {
+    // No active rolled: clash starts at 600ms within card-duel
+    if (!activeRolled && duelElapsed > 600) {
       this._doClash(duelElapsed - 600);
     }
   }
@@ -475,8 +472,17 @@ export class PenaltyAnimation {
     );
   }
 
+  private _cheatingFired(): boolean {
+    return this.ctx.evidence.activesFired.some((a) => a.effect === "cheat");
+  }
+
+  /** Whether an active card rolled the dice this turn (Intimidate or Cheating) — both get the coin-flip beat. */
+  private _activeRolled(): boolean {
+    return this._intimidateFired() || this._cheatingFired();
+  }
+
   private _shouldShowCoin(): boolean {
-    return !!this.ctx.coin && this._intimidateFired();
+    return !!this.ctx.coin && this._activeRolled();
   }
 
   private _updateBallPosition(): void {
