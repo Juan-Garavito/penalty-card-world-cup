@@ -685,3 +685,144 @@ describe("PenaltyShootout — card lifecycle: resetTurn (SCEN-MATCH-12)", () => 
     expect(pBSave.resetTurn).toHaveBeenCalledTimes(1);
   });
 });
+
+// ─── Phase 1 (add-multiplayer-mode) — applyRemoteOutcome ────────────────────
+// REQ: Additive applyRemoteOutcome on guest — applies a host-resolved turn's
+// score/turn/phase WITHOUT calling advance() or PenaltyResolver.
+
+describe("PenaltyShootout.applyRemoteOutcome — guest applies host-resolved outcome (SCEN-REMOTE-OUTCOME)", () => {
+  it("never calls decide() on either player", () => {
+    const { match, pA, pB } = makeMatch([]);
+    const outcome: ResolutionOutcome = { goal: true, evidence: stubEvidence() };
+
+    match.applyRemoteOutcome(outcome);
+
+    expect(pA.decide).not.toHaveBeenCalled();
+    expect(pB.decide).not.toHaveBeenCalled();
+  });
+
+  it("never calls resolver.resolve()", () => {
+    const { match, resolver } = makeMatch([]);
+    const outcome: ResolutionOutcome = { goal: true, evidence: stubEvidence() };
+
+    match.applyRemoteOutcome(outcome);
+
+    expect(resolver.resolve).not.toHaveBeenCalled();
+  });
+
+  it("shooter score increments when outcome.goal is true", () => {
+    const { match } = makeMatch([]);
+    const outcome: ResolutionOutcome = { goal: true, evidence: stubEvidence() };
+
+    match.applyRemoteOutcome(outcome);
+
+    expect(match.score.playerA).toBe(1);
+    expect(match.score.playerB).toBe(0);
+  });
+
+  it("score unchanged when outcome.goal is false", () => {
+    const { match } = makeMatch([]);
+    const outcome: ResolutionOutcome = {
+      goal: false,
+      evidence: stubEvidence(),
+    };
+
+    match.applyRemoteOutcome(outcome);
+
+    expect(match.score.playerA).toBe(0);
+    expect(match.score.playerB).toBe(0);
+  });
+
+  it("turnNumber increments after applyRemoteOutcome()", () => {
+    const { match } = makeMatch([]);
+    expect(match.turnNumber).toBe(1);
+    const outcome: ResolutionOutcome = {
+      goal: false,
+      evidence: stubEvidence(),
+    };
+
+    match.applyRemoteOutcome(outcome);
+
+    expect(match.turnNumber).toBe(2);
+  });
+
+  it("phase returns to WaitingForDecisions with swapped shooter/goalkeeper after a regular turn", () => {
+    const { match } = makeMatch([]);
+    const outcome: ResolutionOutcome = {
+      goal: false,
+      evidence: stubEvidence(),
+    };
+
+    match.applyRemoteOutcome(outcome);
+
+    expect(match.state.phase).toBe("WaitingForDecisions");
+    if (match.state.phase === "WaitingForDecisions") {
+      expect(match.state.shooterId).toBe("pB");
+      expect(match.state.goalkeeperId).toBe("pA");
+    }
+  });
+
+  it("lastOutcome is set to the applied outcome", () => {
+    const { match } = makeMatch([]);
+    const outcome: ResolutionOutcome = { goal: true, evidence: stubEvidence() };
+
+    match.applyRemoteOutcome(outcome);
+
+    expect(match.lastOutcome).toEqual(outcome);
+  });
+
+  it("calls tickShot() and resetTurn() on all PassiveCards of both players", () => {
+    const pAShoot = makeShootCard();
+    const pASave = makeSaveCard();
+    const pBShoot = makeShootCard();
+    const pBSave = makeSaveCard();
+
+    const pACards: PlayerCards = { shootCards: [pAShoot], saveCards: [pASave] };
+    const pBCards: PlayerCards = { shootCards: [pBShoot], saveCards: [pBSave] };
+
+    const { match } = makeMatch([], pACards, pBCards);
+    const outcome: ResolutionOutcome = {
+      goal: false,
+      evidence: stubEvidence(),
+    };
+
+    match.applyRemoteOutcome(outcome);
+
+    expect(pAShoot.tickShot).toHaveBeenCalledTimes(1);
+    expect(pASave.tickShot).toHaveBeenCalledTimes(1);
+    expect(pBShoot.tickShot).toHaveBeenCalledTimes(1);
+    expect(pBSave.tickShot).toHaveBeenCalledTimes(1);
+    expect(pAShoot.resetTurn).toHaveBeenCalledTimes(1);
+    expect(pASave.resetTurn).toHaveBeenCalledTimes(1);
+    expect(pBShoot.resetTurn).toHaveBeenCalledTimes(1);
+    expect(pBSave.resetTurn).toHaveBeenCalledTimes(1);
+  });
+
+  it("throws MatchAlreadyOverError when match is already GameOver", () => {
+    // Drive to GameOver via early win after turn 6 (pA=3, pB=0, pBKicksLeft=2 → 3>0+2)
+    const { match } = makeMatch([true, false, true, false, true, false]);
+    runTurns(match, 6);
+
+    expect(match.state.phase).toBe("GameOver");
+    const outcome: ResolutionOutcome = { goal: true, evidence: stubEvidence() };
+    expect(() => match.applyRemoteOutcome(outcome)).toThrowError(
+      MatchAlreadyOverError,
+    );
+  });
+
+  it("reaches GameOver via applyRemoteOutcome exactly like advance() would (parity check)", () => {
+    // Same goals sequence as the advance()-based early-win scenario, but driven
+    // entirely through applyRemoteOutcome() to prove it reaches the same state.
+    const { match } = makeMatch([]);
+    const goals = [true, false, true, false, true, false];
+
+    for (const goal of goals) {
+      match.applyRemoteOutcome({ goal, evidence: stubEvidence() });
+    }
+
+    expect(match.state.phase).toBe("GameOver");
+    if (match.state.phase === "GameOver") {
+      expect(match.state.winner).toBe("pA");
+    }
+  });
+});

@@ -150,6 +150,36 @@ export class PenaltyShootout {
     this.submitTurnOutcome({ goal: outcome.goal });
   }
 
+  // REQ-REMOTE-OUTCOME-001: additive guest-side sync — applies a host-resolved
+  // turn's score/turn/phase WITHOUT calling advance() or PenaltyResolver.
+  // Mirrors advance() minus the decide()/resolve() calls; transitions to
+  // "ResolvingShot" first because submitTurnOutcome() rejects the
+  // "WaitingForDecisions" phase.
+  applyRemoteOutcome(outcome: ResolutionOutcome): void {
+    if (this._state.phase === "GameOver") {
+      throw new MatchAlreadyOverError();
+    }
+
+    const shooterId = (this._state as { shooterId: string }).shooterId;
+    const goalkeeperId = (this._state as { goalkeeperId: string }).goalkeeperId;
+
+    // Call tickShot on all passive cards of both players (mirrors advance())
+    this.allPassiveCards().forEach((card) => card.tickShot());
+
+    // Transition to ResolvingShot — required: submitTurnOutcome rejects
+    // "WaitingForDecisions"
+    this._state = {
+      phase: "ResolvingShot",
+      shooterId,
+      goalkeeperId,
+    };
+
+    // REQ-INTEGRATION-003: store last outcome for UI
+    this._lastOutcome = outcome;
+
+    this.submitTurnOutcome({ goal: outcome.goal });
+  }
+
   submitTurnOutcome(outcome: TurnOutcome): void {
     if (this._state.phase === "GameOver") {
       throw new MatchAlreadyOverError();
