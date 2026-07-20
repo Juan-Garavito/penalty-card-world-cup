@@ -1,12 +1,19 @@
 import { PenaltyShootout } from "../entities/Match/PenaltyShootout.ts";
 import { HumanPlayer } from "../entities/Players/HumanPlayer.ts";
-import { IAPlayer } from "../entities/Players/IAPlayer.ts";
+import { IPlayer } from "../entities/Players/IPlayer.ts";
+import { RemotePlayer } from "../entities/Players/RemotePlayer.ts";
 import { PassiveCard } from "../entities/Cards/passive/PassiveCard.ts";
 import { ActiveCard } from "../entities/Cards/active/ActiveCard.ts";
 import { PowerUpCard } from "../entities/Cards/powerup/PowerUpCard.ts";
 import { Card } from "../entities/Cards/Card.ts";
 import { Side } from "../entities/Players/Side.ts";
 import { ResolutionOutcome } from "../entities/Match/ResolutionOutcome.ts";
+import { PlayerCards } from "../entities/Match/PlayerCards.ts";
+import {
+  RemoteDecisionAdapter,
+  RemoteDecisionPayload,
+} from "../net/RemoteDecisionAdapter.ts";
+import type { MultiplayerOutboundMessage } from "../net/MultiplayerOutboundMessage.ts";
 import { cardArtUrl } from "./sprites/cardArt.ts";
 import type { AdRewardService } from "../services/AdRewardService.ts";
 
@@ -48,7 +55,7 @@ export class PenaltyPresenter {
   private readonly _shootout: PenaltyShootout;
   private readonly _humanPlayerId: string;
   private readonly _humanPlayer: HumanPlayer;
-  private readonly _iaPlayer: IAPlayer;
+  private readonly _iaPlayer: IPlayer;
   private readonly _cardNames: ReadonlyMap<number, string>;
   private readonly _cardPowers: ReadonlyMap<number, number>;
   private readonly _cardImages: ReadonlyMap<number, string>;
@@ -60,18 +67,36 @@ export class PenaltyPresenter {
 
   private readonly _adRewardService: AdRewardService | null;
 
+  // REQ-MULTIPLAYER-PRESENTER-ROLE: null in single-player. In multiplayer,
+  // host is authoritative (runs advance()/resolver, forwards the outcome);
+  // guest never resolves locally — it stages its decision, sends it, and
+  // waits for the host's outcome (see confirm() and receiveRemoteX below).
+  private readonly _multiplayer: {
+    role: "host" | "guest";
+    send: (message: MultiplayerOutboundMessage) => void;
+  } | null;
+  // Host-only bookkeeping: both sides' decisions must be staged before a
+  // turn can resolve. Reset after each resolved turn.
+  private _localDecisionStaged = false;
+  private _remoteDecisionStaged = false;
+
   constructor(deps: {
     shootout: PenaltyShootout;
     humanPlayerId: string;
     humanPlayer: HumanPlayer;
-    iaPlayer: IAPlayer;
+    iaPlayer: IPlayer;
     adRewardService?: AdRewardService | null;
+    multiplayer?: {
+      role: "host" | "guest";
+      send: (message: MultiplayerOutboundMessage) => void;
+    };
   }) {
     this._shootout = deps.shootout;
     this._humanPlayerId = deps.humanPlayerId;
     this._humanPlayer = deps.humanPlayer;
     this._iaPlayer = deps.iaPlayer;
     this._adRewardService = deps.adRewardService ?? null;
+    this._multiplayer = deps.multiplayer ?? null;
     this._cardNames = this._buildCardNames();
     this._cardPowers = this._buildCardPowers();
     this._cardImages = this._buildCardImages();
@@ -136,6 +161,13 @@ export class PenaltyPresenter {
   confirm(): void {
     if (this._vm.phase === "game-over" || this._vm.phase === "draw")
       throw new Error("Match is over");
+    // Multiplayer only: single-player always resolves synchronously within
+    // this call, so phase can never still be "resolving" on re-entry. In
+    // multiplayer there's a real async gap (network round trip) — without
+    // this guard a re-entrant confirm() would re-stage and, on the guest,
+    // send a duplicate "decision" message over the wire.
+    if (this._vm.phase === "resolving")
+      throw new Error("Cannot confirm: already resolving a turn");
     if (!this._vm.canConfirm)
       throw new Error("Cannot confirm: side or passive not selected");
 
@@ -148,33 +180,85 @@ export class PenaltyPresenter {
     this._humanPlayer.setPendingSelection(this._vm.selection.passive!);
     this._humanPlayer.setPendingActive(this._vm.selection.active ?? null);
 
-    // Advance the shootout
+    if (this._multiplayer === null) {
+      // Single-player: resolve immediately, same as before.
+      this._shootout.advance();
+      this._afterResolution();
+      return;
+    }
+
+    if (this._multiplayer.role === "guest") {
+      // Guest never resolves locally — RNG must run once, host-side only.
+      // Stage the decision on the wire and wait for the host's outcome.
+      const payload: RemoteDecisionPayload = {
+        chosenCardId: this._vm.selection.passive!.id,
+        activeCardId: this._vm.selection.active?.id ?? null,
+        side: this._vm.selection.side!,
+      };
+      this._multiplayer.send({ type: "decision", payload });
+      return;
+    }
+
+    // Host: resolve only once both the local human's decision and the
+    // guest's decision (staged via receiveRemoteDecision) are ready.
+    this._localDecisionStaged = true;
+    if (!this._remoteDecisionStaged) return;
+
     this._shootout.advance();
+    this._afterResolution();
+    this._multiplayer.send({
+      type: "outcome",
+      payload: this._shootout.lastOutcome!,
+    });
+    this._localDecisionStaged = false;
+    this._remoteDecisionStaged = false;
+  }
 
-    const outcome = this._shootout.lastOutcome;
-    const state = this._shootout.state;
-
-    // Design invariant: human is always playerA (first arg to PenaltyShootout constructor)
-    // so humanGoals = shootout.score.playerA
-    const humanGoals = this._shootout.score.playerA;
-    const aiGoals = this._shootout.score.playerB;
-
-    this._pendingPostRevealPhase =
-      state.phase === "GameOver"
-        ? state.winner === null
-          ? "draw"
-          : "game-over"
-        : "showing-result";
-
-    this._vm = {
-      ...this._vm,
-      phase: "revealing",
-      shootoutPhase: this._shootout.shootoutPhase,
-      lastOutcome: outcome,
-      score: { ...this._vm.score, humanGoals, aiGoals },
-      canConfirm: false,
+  // REQ-MULTIPLAYER-PRESENTER-HOST-DECISION: called when the guest's decision
+  // arrives over the wire. Applies it to the RemotePlayer standing in for the
+  // guest, then resolves the turn if the local human's decision is already
+  // staged (see confirm()'s host branch).
+  receiveRemoteDecision(payload: RemoteDecisionPayload): void {
+    if (!this._multiplayer || this._multiplayer.role !== "host") {
+      throw new Error("receiveRemoteDecision is only valid for the host role");
+    }
+    // Only RemotePlayer exposes the setPendingX buffer RemoteDecisionAdapter
+    // stages onto — guard explicitly instead of an unchecked cast (matches
+    // the `instanceof` guidance left on MatchBuild.iaPlayer in MatchFactory.ts)
+    // so a misconfigured `role: "host"` presenter fails with a clear error
+    // instead of an opaque "setPendingSelection is not a function".
+    if (!(this._iaPlayer instanceof RemotePlayer)) {
+      throw new Error(
+        "receiveRemoteDecision requires a RemotePlayer iaPlayer",
+      );
+    }
+    const cards: PlayerCards = {
+      shootCards: this._iaPlayer.striker.shootCards,
+      saveCards: this._iaPlayer.goalkeeper.saveCards,
     };
-    this._emit();
+    RemoteDecisionAdapter.apply(payload, cards, this._iaPlayer);
+    this._remoteDecisionStaged = true;
+    if (!this._localDecisionStaged) return;
+
+    this._shootout.advance();
+    this._afterResolution();
+    this._multiplayer.send({
+      type: "outcome",
+      payload: this._shootout.lastOutcome!,
+    });
+    this._localDecisionStaged = false;
+    this._remoteDecisionStaged = false;
+  }
+
+  // REQ-MULTIPLAYER-PRESENTER-GUEST-OUTCOME: called when the host's resolved
+  // outcome arrives over the wire. Applies it to the guest's local shootout
+  // (no advance()/resolver — RNG already ran host-side) and refreshes the vm.
+  receiveRemoteOutcome(outcome: ResolutionOutcome): void {
+    if (!this._multiplayer || this._multiplayer.role !== "guest") {
+      throw new Error("receiveRemoteOutcome is only valid for the guest role");
+    }
+    this._shootout.applyRemoteOutcome(outcome);
+    this._afterResolution();
   }
 
   acknowledgeReveal(): void {
@@ -240,6 +324,36 @@ export class PenaltyPresenter {
   }
 
   // ─── Private helpers ────────────────────────────────────────────────────────
+
+  // Shared by confirm() (single-player and host, once resolved) and
+  // receiveRemoteOutcome() (guest): reads the just-resolved outcome/state off
+  // the shootout and updates the vm into "revealing".
+  private _afterResolution(): void {
+    const outcome = this._shootout.lastOutcome;
+    const state = this._shootout.state;
+
+    // Design invariant: human is always playerA (first arg to PenaltyShootout constructor)
+    // so humanGoals = shootout.score.playerA
+    const humanGoals = this._shootout.score.playerA;
+    const aiGoals = this._shootout.score.playerB;
+
+    this._pendingPostRevealPhase =
+      state.phase === "GameOver"
+        ? state.winner === null
+          ? "draw"
+          : "game-over"
+        : "showing-result";
+
+    this._vm = {
+      ...this._vm,
+      phase: "revealing",
+      shootoutPhase: this._shootout.shootoutPhase,
+      lastOutcome: outcome,
+      score: { ...this._vm.score, humanGoals, aiGoals },
+      canConfirm: false,
+    };
+    this._emit();
+  }
 
   private _buildInitialViewModel(): PenaltyViewModel {
     const state = this._shootout.state;

@@ -18,6 +18,8 @@ import { TurnContext } from "../entities/Players/TurnContext.ts";
 import { PassiveCard } from "../entities/Cards/passive/PassiveCard.ts";
 import { ActiveCard } from "../entities/Cards/active/ActiveCard.ts";
 import { Side } from "../entities/Players/Side.ts";
+import { MatchFactory } from "../entities/Match/MatchFactory.ts";
+import type { MultiplayerOutboundMessage } from "../net/MultiplayerOutboundMessage.ts";
 
 // Deterministic strategy: always picks first card, no active, always "center"
 class AlwaysCenterStrategy implements IAStrategy {
@@ -953,5 +955,166 @@ describe("PenaltyPresenter — SCEN-AD-PRES-WATCHPASSIVE-DENIED", () => {
     });
     await presenter.watchAdForPassive(card);
     expect(rewindSpy).not.toHaveBeenCalled();
+  });
+});
+
+// ─── PR3: host/guest multiplayer sync ────────────────────────────────────────
+//
+// Builds two independent PenaltyPresenters (host + guest) via
+// MatchFactory.buildMultiplayer(), each wired to the other via an in-process
+// loopback `send` — this simulates what the future WS relay client does:
+// translate {type:"decision"} into the peer's receiveRemoteDecision(payload),
+// and {type:"outcome"} into the peer's receiveRemoteOutcome(payload).
+
+describe("PenaltyPresenter — multiplayer sync", () => {
+  function buildMultiplayerPair() {
+    const hostBuild = MatchFactory.buildMultiplayer("host");
+    const guestBuild = MatchFactory.buildMultiplayer("guest");
+
+    const refs: { host?: PenaltyPresenter; guest?: PenaltyPresenter } = {};
+
+    refs.host = new PenaltyPresenter({
+      shootout: hostBuild.shootout,
+      humanPlayerId: hostBuild.humanPlayerId,
+      humanPlayer: hostBuild.humanPlayer,
+      iaPlayer: hostBuild.iaPlayer,
+      multiplayer: {
+        role: "host",
+        send: (message: MultiplayerOutboundMessage) => {
+          if (message.type === "outcome") {
+            refs.guest!.receiveRemoteOutcome(message.payload);
+          }
+        },
+      },
+    });
+
+    refs.guest = new PenaltyPresenter({
+      shootout: guestBuild.shootout,
+      humanPlayerId: guestBuild.humanPlayerId,
+      humanPlayer: guestBuild.humanPlayer,
+      iaPlayer: guestBuild.iaPlayer,
+      multiplayer: {
+        role: "guest",
+        send: (message: MultiplayerOutboundMessage) => {
+          if (message.type === "decision") {
+            refs.host!.receiveRemoteDecision(message.payload);
+          }
+        },
+      },
+    });
+
+    return {
+      host: refs.host,
+      guest: refs.guest,
+      hostShootout: hostBuild.shootout,
+      guestShootout: guestBuild.shootout,
+    };
+  }
+
+  // Normal-tier passive at index 0 (power 0, no cooldown) is always
+  // playable for either role/catalog, so this is a safe default selection.
+  function stage(presenter: PenaltyPresenter, side: Side): void {
+    const vm = presenter.viewModel;
+    presenter.selectSide(side);
+    presenter.selectPassive(vm.humanHand.passives[0]);
+  }
+
+  it("SCEN-MP-REMOTE-THEN-LOCAL: guest confirms first, host confirms second — resolves exactly once and converges", () => {
+    const { host, guest, hostShootout, guestShootout } =
+      buildMultiplayerPair();
+    const hostAdvanceSpy = vi.spyOn(hostShootout, "advance");
+    const guestAdvanceSpy = vi.spyOn(guestShootout, "advance");
+
+    // Round 1: host is playerA and shoots first.
+    expect(host.viewModel.humanRole).toBe("striker");
+    expect(guest.viewModel.humanRole).toBe("goalkeeper");
+
+    stage(guest, "center");
+    guest.confirm();
+    // Guest only staged + sent its decision — host hasn't confirmed yet.
+    expect(hostAdvanceSpy).not.toHaveBeenCalled();
+    expect(guest.viewModel.phase).toBe("resolving");
+
+    stage(host, "left");
+    host.confirm();
+
+    expect(hostAdvanceSpy).toHaveBeenCalledTimes(1);
+    expect(guestAdvanceSpy).not.toHaveBeenCalled();
+    expect(host.viewModel.phase).toBe("revealing");
+    expect(guest.viewModel.phase).toBe("revealing");
+    expect(host.viewModel.score).toEqual(guest.viewModel.score);
+    expect(host.viewModel.shootoutPhase).toBe(guest.viewModel.shootoutPhase);
+    expect(hostShootout.score).toEqual(guestShootout.score);
+  });
+
+  it("SCEN-MP-LOCAL-THEN-REMOTE: host confirms first, guest confirms second — resolves exactly once and converges", () => {
+    const { host, guest, hostShootout, guestShootout } =
+      buildMultiplayerPair();
+    const hostAdvanceSpy = vi.spyOn(hostShootout, "advance");
+    const guestAdvanceSpy = vi.spyOn(guestShootout, "advance");
+
+    stage(host, "left");
+    host.confirm();
+    // Host staged its local decision but the guest's hasn't arrived yet.
+    expect(hostAdvanceSpy).not.toHaveBeenCalled();
+    expect(host.viewModel.phase).toBe("resolving");
+
+    stage(guest, "center");
+    guest.confirm();
+
+    expect(hostAdvanceSpy).toHaveBeenCalledTimes(1);
+    expect(guestAdvanceSpy).not.toHaveBeenCalled();
+    expect(host.viewModel.phase).toBe("revealing");
+    expect(guest.viewModel.phase).toBe("revealing");
+    expect(host.viewModel.score).toEqual(guest.viewModel.score);
+    expect(hostShootout.score).toEqual(guestShootout.score);
+  });
+
+  it("SCEN-MP-FULL-MATCH: plays a full match to game-over, both presenters converging every round", () => {
+    const { host, guest, hostShootout, guestShootout } =
+      buildMultiplayerPair();
+    const guestAdvanceSpy = vi.spyOn(guestShootout, "advance");
+
+    let iterations = 0;
+    while (host.viewModel.phase === "selecting" && iterations < 20) {
+      iterations++;
+
+      // Host is always playerA: force a direct goal (mismatched sides) when
+      // host shoots, and a deterministic miss (matched sides, equal Normal
+      // power) when guest shoots — RNG-free, guarantees a fast early win.
+      const hostIsStriker = host.viewModel.humanRole === "striker";
+      const hostSide: Side = hostIsStriker ? "left" : "center";
+      const guestSide: Side = hostIsStriker ? "right" : "center";
+
+      stage(guest, guestSide);
+      guest.confirm();
+      stage(host, hostSide);
+      host.confirm();
+
+      expect(host.viewModel.phase).toBe("revealing");
+      expect(guest.viewModel.phase).toBe("revealing");
+      expect(host.viewModel.score).toEqual(guest.viewModel.score);
+
+      host.acknowledgeReveal();
+      guest.acknowledgeReveal();
+
+      // Cast avoids a spurious "no overlap" narrowing error: TS narrows
+      // host.viewModel.phase to the while-loop's "selecting" literal and
+      // doesn't widen it back even though confirm()/acknowledgeReveal()
+      // mutate the presenter's internal state between checks.
+      if ((host.viewModel.phase as string) === "showing-result") {
+        host.advanceTurn();
+        guest.advanceTurn();
+      }
+    }
+
+    // Guest never resolves locally — every turn was applied via
+    // receiveRemoteOutcome, never advance().
+    expect(guestAdvanceSpy).not.toHaveBeenCalled();
+    expect(iterations).toBeLessThan(20);
+    expect(["game-over", "draw"]).toContain(host.viewModel.phase);
+    expect(guest.viewModel.phase).toBe(host.viewModel.phase);
+    expect(host.viewModel.score).toEqual(guest.viewModel.score);
+    expect(hostShootout.score).toEqual(guestShootout.score);
   });
 });
