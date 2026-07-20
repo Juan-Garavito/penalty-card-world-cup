@@ -22,6 +22,13 @@ import type { PowerUpCard } from "../Cards/powerup/PowerUpCard.ts";
 // not IAPlayer). build() itself keeps returning a real IAPlayer instance —
 // its declared return type below intersects back to IAPlayer so ALL existing
 // callers (main.ts, PenaltyPresenter deps) see zero type/behavior change.
+//
+// NOTE — despite the field name, `iaPlayer` does NOT always hold an
+// AI-controlled player: build() returns a real IAPlayer here, but
+// buildMultiplayer() returns a RemotePlayer instead — a real human peer over
+// the network, not an AI. Don't branch on "iaPlayer is set" to mean
+// "AI-controlled"; check the concrete instance type (e.g. `instanceof
+// IAPlayer` / `instanceof RemotePlayer`) if that distinction matters.
 export interface MatchBuild {
   shootout: PenaltyShootout;
   humanPlayerId: string;
@@ -182,6 +189,10 @@ export class MatchFactory {
   // state) evolve identically on host and guest, which PenaltyShootout's
   // guest-side applyRemoteOutcome() depends on to converge without ever
   // calling decide()/advance().
+  //
+  // NOTE: the returned `iaPlayer` field holds a RemotePlayer here (a real
+  // human peer over the network), NOT an AI — see the doc comment on
+  // MatchBuild.iaPlayer above.
   static buildMultiplayer(role: "host" | "guest"): MatchBuild {
     // Host catalog — ids 1-13 (same shape/tiers as build()'s human catalog)
     const hostShootCards = [
@@ -275,17 +286,25 @@ export class MatchFactory {
       guestPowerUps,
     );
 
-    const hostPlayer: IPlayer =
-      role === "host"
-        ? new HumanPlayer("host-1", hostGoalkeeper, hostStriker)
-        : new RemotePlayer("host-1", hostGoalkeeper, hostStriker);
-    const guestPlayer: IPlayer =
-      role === "guest"
-        ? new HumanPlayer("guest-1", guestGoalkeeper, guestStriker)
-        : new RemotePlayer("guest-1", guestGoalkeeper, guestStriker);
-
-    const localPlayer = role === "host" ? hostPlayer : guestPlayer;
-    const remotePlayer = role === "host" ? guestPlayer : hostPlayer;
+    // Two explicit, statically-typed branches (instead of one generic
+    // ternary + an `as HumanPlayer` cast on the winner): each branch knows,
+    // without a cast, which side is the real local HumanPlayer and which is
+    // the RemotePlayer standing in for the networked opponent.
+    let humanPlayer: HumanPlayer;
+    let remotePlayer: RemotePlayer;
+    let hostPlayer: IPlayer;
+    let guestPlayer: IPlayer;
+    if (role === "host") {
+      humanPlayer = new HumanPlayer("host-1", hostGoalkeeper, hostStriker);
+      remotePlayer = new RemotePlayer("guest-1", guestGoalkeeper, guestStriker);
+      hostPlayer = humanPlayer;
+      guestPlayer = remotePlayer;
+    } else {
+      humanPlayer = new HumanPlayer("guest-1", guestGoalkeeper, guestStriker);
+      remotePlayer = new RemotePlayer("host-1", hostGoalkeeper, hostStriker);
+      hostPlayer = remotePlayer;
+      guestPlayer = humanPlayer;
+    }
 
     // Design invariant: host is always playerA (first arg), guest always
     // playerB — fixed regardless of `role`, so both clients' local
@@ -299,8 +318,8 @@ export class MatchFactory {
 
     return {
       shootout,
-      humanPlayerId: localPlayer.id,
-      humanPlayer: localPlayer as HumanPlayer,
+      humanPlayerId: humanPlayer.id,
+      humanPlayer,
       iaPlayer: remotePlayer,
     };
   }
