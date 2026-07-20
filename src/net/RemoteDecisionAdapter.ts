@@ -4,6 +4,9 @@ import { PassiveCard } from "../entities/Cards/passive/PassiveCard.ts";
 import { ActiveCard } from "../entities/Cards/active/ActiveCard.ts";
 import { Side } from "../entities/Players/Side.ts";
 import { UnknownCardIdError } from "./errors/UnknownCardIdError.ts";
+import { InvalidSideError } from "./errors/InvalidSideError.ts";
+
+const VALID_SIDES: ReadonlySet<Side> = new Set(["left", "center", "right"]);
 
 // REQ-MULTIPLAYER-DECISION-TRANSLATION: cards are stateful class instances,
 // not serializable, so a remote peer's decision crosses the wire as numeric
@@ -36,10 +39,19 @@ export class RemoteDecisionAdapter {
       payload.activeCardId,
       target,
     );
+    RemoteDecisionAdapter._validateSide(payload.side);
 
     target.setPendingSelection(chosen);
     target.setPendingActive(active);
     target.setPendingSide(payload.side);
+  }
+
+  // REQ-MULTIPLAYER-ADAPTER-SIDE-VALIDATION: `side` crosses the wire with the
+  // same "trust nothing" posture as chosenCardId/activeCardId — validated
+  // BEFORE any setPendingX call, so an invalid value throws atomically
+  // alongside the id lookups instead of being passed straight through.
+  private static _validateSide(side: Side): void {
+    if (!VALID_SIDES.has(side)) throw new InvalidSideError(side);
   }
 
   private static _findChosen(
@@ -59,7 +71,11 @@ export class RemoteDecisionAdapter {
     activeCardId: number | null,
     target: RemotePlayer,
   ): ActiveCard | null {
-    if (activeCardId === null) return null;
+    // Loose equality intentionally also catches `undefined` — a real
+    // JSON.parse()'d wire payload that omits the key entirely produces
+    // undefined at runtime, despite the `number | null` TS annotation not
+    // holding for untrusted input. Both mean "no active card played".
+    if (activeCardId == null) return null;
     const activeCards: ActiveCard[] = [
       ...target.striker.activeCards,
       ...target.goalkeeper.activeCards,

@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { RemoteDecisionAdapter } from "./RemoteDecisionAdapter.ts";
 import { UnknownCardIdError } from "./errors/UnknownCardIdError.ts";
+import { InvalidSideError } from "./errors/InvalidSideError.ts";
 import { RemotePlayer } from "../entities/Players/RemotePlayer.ts";
 import { Striker } from "../entities/Footballers/Striker.ts";
 import { Goalkeeper } from "../entities/Footballers/Goalkeeper.ts";
@@ -92,6 +93,28 @@ describe("RemoteDecisionAdapter.apply()", () => {
     expect(setActive).toHaveBeenCalledWith(goalkeeperActive);
   });
 
+  it("SCEN-ADAPTER-ACTIVE-UNDEFINED: an activeCardId of undefined (key omitted in a raw JSON payload) is treated the same as null — no active card, no throw", () => {
+    const { target, cards } = makeTarget();
+    const setSelection = vi.spyOn(target, "setPendingSelection");
+    const setActive = vi.spyOn(target, "setPendingActive");
+    const setSide = vi.spyOn(target, "setPendingSide");
+
+    // Cast: simulates a real JSON.parse()'d payload where the key was
+    // omitted entirely — TS's `number | null` annotation doesn't hold at
+    // runtime for untrusted wire data.
+    const payload = { chosenCardId: 101, side: "left" } as unknown as {
+      chosenCardId: number;
+      activeCardId: number | null;
+      side: "left" | "center" | "right";
+    };
+
+    RemoteDecisionAdapter.apply(payload, cards, target);
+
+    expect(setSelection).toHaveBeenCalled();
+    expect(setActive).toHaveBeenCalledWith(null);
+    expect(setSide).toHaveBeenCalledWith("left");
+  });
+
   it("SCEN-ADAPTER-SIDE-PASSTHROUGH: side value is forwarded unchanged", () => {
     const { target, cards } = makeTarget();
     const setSide = vi.spyOn(target, "setPendingSide");
@@ -137,6 +160,34 @@ describe("RemoteDecisionAdapter.apply()", () => {
         target,
       ),
     ).toThrow(UnknownCardIdError);
+
+    expect(setSelection).not.toHaveBeenCalled();
+    expect(setActive).not.toHaveBeenCalled();
+    expect(setSide).not.toHaveBeenCalled();
+  });
+
+  it("SCEN-ADAPTER-INVALID-SIDE: an invalid side value throws InvalidSideError and applies nothing — including the otherwise-valid chosen/active cards", () => {
+    const { target, cards } = makeTarget();
+    const setSelection = vi.spyOn(target, "setPendingSelection");
+    const setActive = vi.spyOn(target, "setPendingActive");
+    const setSide = vi.spyOn(target, "setPendingSide");
+
+    // Cast: simulates a real JSON.parse()'d payload with an out-of-range
+    // string — TS's `Side` union annotation doesn't hold at runtime for
+    // untrusted wire data.
+    const payload = {
+      chosenCardId: 101,
+      activeCardId: null,
+      side: "up",
+    } as unknown as {
+      chosenCardId: number;
+      activeCardId: number | null;
+      side: "left" | "center" | "right";
+    };
+
+    expect(() => RemoteDecisionAdapter.apply(payload, cards, target)).toThrow(
+      InvalidSideError,
+    );
 
     expect(setSelection).not.toHaveBeenCalled();
     expect(setActive).not.toHaveBeenCalled();
