@@ -11,12 +11,13 @@ import { MathRandomRng } from "./MathRandomRng.ts";
 import { ResolutionOutcome, ResolutionEvidence } from "./ResolutionOutcome.ts";
 import { TurnContext } from "../Players/TurnContext.ts";
 
-// Structural view of a player's active-card pools. HumanPlayer, IAPlayer, and
-// RemotePlayer all expose `striker`/`goalkeeper` with `activeCards`, but
-// IPlayer intentionally does not declare them — card storage is meant to stay
-// an implementation detail behind decide(). applyRemoteOutcome() is the one
-// exception: unlike advance(), it never calls decide(), so it must reach in
-// directly to replay the ActiveCard state changes carried by evidence.
+// Structural view of a player's active-card pools, kept narrower than
+// IPlayer's full `striker: Striker` / `goalkeeper: Goalkeeper` fields
+// (IPlayer now declares them — REQ-MULTIPLAYER-IPLAYER-CARDS) so this stays
+// tolerant of lightweight test doubles that only stub `activeCards`.
+// applyRemoteOutcome() is the one method that reads through this: unlike
+// advance(), it never calls decide(), so it must reach in directly to replay
+// the ActiveCard state changes carried by evidence.
 interface PlayerWithActiveCards {
   readonly striker?: { readonly activeCards: ReadonlyArray<ActiveCard> };
   readonly goalkeeper?: { readonly activeCards: ReadonlyArray<ActiveCard> };

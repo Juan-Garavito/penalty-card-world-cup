@@ -56,7 +56,13 @@ function makeStubResolver(goals: boolean[]): PenaltyResolver {
 }
 
 function makePlayer(id: string): IPlayer {
-  return { id, decide: vi.fn(), resetForNewMatch: vi.fn() };
+  return {
+    id,
+    decide: vi.fn(),
+    resetForNewMatch: vi.fn(),
+    striker: new Striker([], [], []),
+    goalkeeper: new Goalkeeper([], [], []),
+  };
 }
 
 function makeShootCard(): ShootCard {
@@ -838,16 +844,16 @@ function makePlayerWithActives(
   id: string,
   strikerActives: ActiveCard[] = [],
   goalkeeperActives: ActiveCard[] = [],
-): IPlayer & {
-  striker: { activeCards: ActiveCard[] };
-  goalkeeper: { activeCards: ActiveCard[] };
-} {
+): IPlayer {
+  // Duck-typed stand-in: only activeCards is exercised by the tests below,
+  // so a real Striker/Goalkeeper instance isn't needed — cast bridges the
+  // narrower stub shape to IPlayer's now-required striker/goalkeeper fields.
   return {
     id,
     decide: vi.fn(),
     resetForNewMatch: vi.fn(),
-    striker: { activeCards: strikerActives },
-    goalkeeper: { activeCards: goalkeeperActives },
+    striker: { activeCards: strikerActives } as unknown as Striker,
+    goalkeeper: { activeCards: goalkeeperActives } as unknown as Goalkeeper,
   };
 }
 
