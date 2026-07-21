@@ -1,6 +1,10 @@
 import { describe, it, expect, vi } from "vitest";
 import { Container, Text } from "pixi.js";
-import { HomeScreen, setPendingOnStart } from "./HomeScreen.ts";
+import {
+  HomeScreen,
+  setPendingOnStart,
+  setPendingOnPlayOnline,
+} from "./HomeScreen.ts";
 
 /** Walk the display tree depth-first and return every Text whose text matches. */
 function findTextNodes(root: Container, label: string): Text[] {
@@ -16,11 +20,12 @@ function findTextNodes(root: Container, label: string): Text[] {
   return found;
 }
 
-function makeScreen(onStart = vi.fn()) {
+function makeScreen(onStart = vi.fn(), onPlayOnline = vi.fn()) {
   const screen = new HomeScreen();
   setPendingOnStart(onStart);
+  setPendingOnPlayOnline(onPlayOnline);
   screen.prepare();
-  return { screen, onStart };
+  return { screen, onStart, onPlayOnline };
 }
 
 describe("HomeScreen", () => {
@@ -76,6 +81,19 @@ describe("HomeScreen", () => {
   it("SCEN-HS-NO-CLICK-ANYWHERE: pointerup on the screen background does not fire onStart", () => {
     const { screen, onStart } = makeScreen();
     screen.emit("pointerup", {} as never);
+    expect(onStart).not.toHaveBeenCalled();
+  });
+
+  it("SCEN-HS-PLAY-ONLINE-CB: pointerup on PLAY ONLINE fires the onPlayOnline callback, not onStart", () => {
+    const { screen, onStart, onPlayOnline } = makeScreen();
+    const nodes = findTextNodes(screen, "PLAY ONLINE");
+    expect(nodes.length).toBeGreaterThan(0);
+    const playOnlineNode = nodes[0];
+    playOnlineNode.emit(
+      "pointerup",
+      { stopPropagation: vi.fn() } as never,
+    );
+    expect(onPlayOnline).toHaveBeenCalledTimes(1);
     expect(onStart).not.toHaveBeenCalled();
   });
 });

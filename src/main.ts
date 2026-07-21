@@ -11,7 +11,21 @@ import {
 import {
   HomeScreen,
   setPendingOnStart,
+  setPendingOnPlayOnline,
 } from "./screens/HomeScreen.ts";
+import {
+  OnlineMenuScreen,
+  setPendingOnHost,
+  setPendingOnJoin,
+} from "./screens/OnlineMenuScreen.ts";
+import { HostGameScreen } from "./screens/HostGameScreen.ts";
+import { JoinGameScreen } from "./screens/JoinGameScreen.ts";
+import {
+  setPendingOnConnected,
+  setPendingOnCancel,
+} from "./screens/OnlineMatchPending.ts";
+import { wireNetworkBridge } from "./net/PenaltyNetworkBridge.ts";
+import type { PeerTransport } from "./net/PeerTransport.ts";
 import { LoadingScreen } from "./screens/LoadingScreen.ts";
 import {
   PenaltyScreen,
@@ -80,6 +94,17 @@ const PHASE_LABELS: Record<TournamentPhase, string> = {
   "3rd": "3rd Place",
   final: "Final",
 };
+
+// Neutral kit colors for online matches — there's no team-selection step
+// before an online match (see goToOnlineMenu/goToHostGame/goToJoinGame
+// below), so there's no WorldCupTeam to source strikerColor/goalkeeperColor
+// from (see TeamData.ts / WorldCupTeam.ts). Reuses colors already
+// established elsewhere in the UI (HomeScreen's gold accent, SettingsScreen's
+// navy panel and muted gray) instead of inventing new hex values.
+const ONLINE_HUMAN_STRIKER_COLOR = 0xf5b73d;
+const ONLINE_HUMAN_KEEPER_COLOR = 0x1b315a;
+const ONLINE_OPPONENT_STRIKER_COLOR = 0x9a9a9a;
+const ONLINE_OPPONENT_KEEPER_COLOR = 0x4a4a4a;
 
 // Deterministic forward-progression map for knockout phases.
 // Terminal phases (3rd, final) map to null and are NOT included here —
@@ -395,6 +420,79 @@ inject();
     await engine.navigation.showScreen(PenaltyScreen);
   }
 
+  // ── Online match flow ────────────────────────────────────────────────────
+
+  async function goToOnlineMenu(): Promise<void> {
+    setPendingOnHost(() => void goToHostGame());
+    setPendingOnJoin(() => void goToJoinGame());
+    await engine.navigation.presentPopup(OnlineMenuScreen);
+  }
+
+  async function goToHostGame(): Promise<void> {
+    setPendingOnConnected(
+      (transport) => void playOnlineMatch("host", transport),
+    );
+    setPendingOnCancel(() => void goToHome());
+    await engine.navigation.showScreen(HostGameScreen);
+  }
+
+  async function goToJoinGame(): Promise<void> {
+    setPendingOnConnected(
+      (transport) => void playOnlineMatch("guest", transport),
+    );
+    setPendingOnCancel(() => void goToHome());
+    await engine.navigation.showScreen(JoinGameScreen);
+  }
+
+  async function playOnlineMatch(
+    role: "host" | "guest",
+    transport: PeerTransport,
+  ): Promise<void> {
+    const { shootout, humanPlayerId, humanPlayer, iaPlayer } =
+      MatchFactory.buildMultiplayer(role);
+
+    const presenter = new PenaltyPresenter({
+      shootout,
+      humanPlayerId,
+      humanPlayer,
+      iaPlayer,
+      // No tournament exists for a standalone online match, so
+      // _adRewardService is always null here (it's only ever set inside
+      // goToTeamSelection(), after a tournament starts) — PenaltyPresenter/
+      // PenaltyScreen already treat a null/undefined adRewardService as
+      // "ad rewards unavailable", so this doesn't need its own setup.
+      adRewardService: _adRewardService ?? undefined,
+      multiplayer: { role, send: (m) => transport.send(m) },
+    });
+    const unsubscribeNetwork = wireNetworkBridge(presenter, transport, role);
+
+    setPendingOnMatchComplete(() => {
+      // Mirrors playMatch()'s onStateChange cleanup (adGameplayStop/
+      // bgm.unduck) — there's no TournamentMatch to write a result into
+      // here, but gameplay-ad-state and music ducking still need to be
+      // undone before returning Home, exactly as the tournament flow does.
+      adGameplayStop();
+      bgm.unduck();
+      unsubscribeNetwork();
+      transport.close();
+      void goToHome();
+    });
+    setPendingPresenter(presenter);
+    setPendingSpriteBundle(spriteBundle);
+    setPendingCardTextures(new Map(cardTextures));
+    setPendingTeamColors(
+      ONLINE_HUMAN_STRIKER_COLOR,
+      ONLINE_HUMAN_KEEPER_COLOR,
+      ONLINE_OPPONENT_STRIKER_COLOR,
+      ONLINE_OPPONENT_KEEPER_COLOR,
+    );
+    setPendingTeamNames("YOU", "OPPONENT");
+
+    adGameplayStart();
+    bgm.duck();
+    await engine.navigation.showScreen(PenaltyScreen);
+  }
+
   // ── Team selection → start tournament ────────────────────────────────────
 
   async function goToTeamSelection() {
@@ -419,6 +517,7 @@ inject();
     sfx.stop(SOUND_ALIASES.winner);
     bgm.resume();
     setPendingOnStart(() => void goToTeamSelection());
+    setPendingOnPlayOnline(() => void goToOnlineMenu());
     await engine.navigation.showScreen(HomeScreen);
     return undefined as never;
   }

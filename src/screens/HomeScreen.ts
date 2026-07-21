@@ -17,15 +17,21 @@ const SPLIT_Y = 340; // divides stadium top from pitch bottom
 // ─── Pending slot ─────────────────────────────────────────────────────────────
 
 let _pendingOnStart: (() => void) | null = null;
+let _pendingOnPlayOnline: (() => void) | null = null;
 
 export function setPendingOnStart(cb: () => void): void {
   _pendingOnStart = cb;
+}
+
+export function setPendingOnPlayOnline(cb: () => void): void {
+  _pendingOnPlayOnline = cb;
 }
 
 // ─── Screen ───────────────────────────────────────────────────────────────────
 
 export class HomeScreen extends Container {
   private _onStart: (() => void) | null = null;
+  private _onPlayOnline: (() => void) | null = null;
   private _crtFilter: Filter | null = null;
   private _keyHandler: ((e: KeyboardEvent) => void) | null = null;
   private _footerTicker: ((t: Ticker) => void) | null = null;
@@ -38,6 +44,8 @@ export class HomeScreen extends Container {
   prepare(): void {
     this._onStart = _pendingOnStart;
     _pendingOnStart = null;
+    this._onPlayOnline = _pendingOnPlayOnline;
+    _pendingOnPlayOnline = null;
     this._buildUI();
 
     this._keyHandler = (e: KeyboardEvent) => {
@@ -68,6 +76,7 @@ export class HomeScreen extends Container {
     this.removeChildren();
     this.filters = [];
     this._onStart = null;
+    this._onPlayOnline = null;
     this._crtFilter = null;
   }
 
@@ -275,6 +284,7 @@ export class HomeScreen extends Container {
       { text: "START TOURNAMENT", y: 355, dim: false, active: true },
       { text: "CONTINUE", y: 407, dim: true, active: false },
       { text: "EXIT", y: 455, dim: true, active: false },
+      { text: "PLAY ONLINE", y: 503, dim: false, active: true },
     ];
 
     // Arrow selector for active item
@@ -298,7 +308,11 @@ export class HomeScreen extends Container {
         lbl.on("pointerup", (e) => {
           e.stopPropagation();
           sfx.play(SOUND_ALIASES.buttonClick);
-          this._onStart?.();
+          if (item.text === "PLAY ONLINE") {
+            this._onPlayOnline?.();
+          } else {
+            this._onStart?.();
+          }
         });
       }
 

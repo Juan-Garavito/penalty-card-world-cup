@@ -66,6 +66,35 @@
           Turn your phone to landscape to play
         </p>
       </div>
+      <div class="room-code-overlay" aria-hidden="true">
+        <p class="room-code-overlay__title">ENTER ROOM CODE</p>
+        <input
+          id="room-code-input"
+          class="room-code-overlay__input"
+          type="text"
+          maxlength="6"
+          autocomplete="off"
+          autocapitalize="characters"
+          spellcheck="false"
+        />
+        <p id="room-code-error" class="room-code-overlay__error"></p>
+        <div class="room-code-overlay__actions">
+          <button
+            id="room-code-connect"
+            class="room-code-overlay__button room-code-overlay__button--primary"
+            type="button"
+          >
+            CONNECT
+          </button>
+          <button
+            id="room-code-cancel"
+            class="room-code-overlay__button"
+            type="button"
+          >
+            CANCEL
+          </button>
+        </div>
+      </div>
     </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
