@@ -36,30 +36,31 @@ import { NullifyCard } from "../entities/Cards/active/NullifyCard.ts";
 import { TIER_STATS } from "../entities/Cards/Tier.ts";
 import type { Card } from "../entities/Cards/Card.ts";
 import { cardArtUrl } from "./sprites/cardArt.ts";
+import { DESIGN_WIDTH, DESIGN_HEIGHT } from "../engine/resize/designSize.ts";
 
-// ─── LAYOUT constants (virtual canvas 768×1024) ───────────────────────────────
-// Top-down soccer view: goal at the top, striker at the bottom firing upward.
+// ─── LAYOUT constants (fixed virtual canvas 1280×720, landscape) ─────────────
+// Top-down soccer view: goal near the top of the pitch band, striker below it
+// firing upward. The render buffer is ALWAYS DESIGN_WIDTH×DESIGN_HEIGHT — see
+// designSize.ts / resize.ts — so every position here is an absolute pixel
+// coordinate. Screens never touch `.scale` for resize purposes anymore.
 
-const LAYOUT = {
-  CANVAS_W: 768,
-  CANVAS_H: 1024,
+export const LAYOUT = {
+  CANVAS_W: DESIGN_WIDTH,
+  CANVAS_H: DESIGN_HEIGHT,
 
-  // Score band (top ~10%)
-  SCORE: { x: 0, y: 0, w: 768, h: 102 },
+  // Score band (top strip)
+  SCORE: { x: 0, y: 0, w: DESIGN_WIDTH, h: 56 },
 
-  // Top-down field (~50%)
-  PLAYER_AREA: { x: 0, y: 102, w: 768, h: 600 },
+  // Top-down field band, below the score bar.
+  PLAYER_AREA: { x: 0, y: 56, w: DESIGN_WIDTH, h: 444 },
 
   // Goal outline (top of the field). Drawn as a wireframe rectangle.
   // Fallback only — replaced by the real pitch sprite once it's installed.
-  GOAL_FRAME: { x: 220, y: 140, w: 328, h: 140, color: 0x33aa66, stroke: 3 },
+  GOAL_FRAME: { x: 480, y: 90, w: 320, h: 130, color: 0x33aa66, stroke: 3 },
   // Real pitch/goal sprite (goal posts + grass). Native art is 104×62, rendered
-  // bigger so it reads clearly. Positioned by its center (anchor 0.5) just BELOW
-  // the stands (fans + horizontal wall) so it never overlaps the crowd. cy is
-  // derived from the stands layout:
-  //   (standsTopFrac + fansBandFrac)*1024 + 62*scale (wall) + 62*scale/2
-  //   = 256 + 111.6 + 55.8 ≈ 423
-  GOAL: { cx: 384, cy: 400, scaleX: 3.8, scaleY: 4.6 },
+  // bigger so it reads clearly. Positioned by its center (anchor 0.5) just below
+  // the stands (fans + horizontal wall) so it never overlaps the crowd.
+  GOAL: { cx: 640, cy: 220, scaleX: 3.6, scaleY: 3.3 },
 
   // Environment (screen-space background, laid out from the real renderer size
   // so the pixel-art tiles instead of stretching). Grass color is sampled from
@@ -67,46 +68,46 @@ const LAYOUT = {
   ENV: {
     grassColor: "#2f8f43",
     standsTopFrac: 0.03, // stands band starts just below the score bar
-    fansBandFrac: 0.22, // fan-rows band height as a fraction of h
-    wallFrac: 0.2, // horizontal wall height — independent of goal scale
-    crowdRows: 3, // fan rows in the band
+    fansBandFrac: 0.15, // fan-rows band height as a fraction of h
+    wallFrac: 0.12, // horizontal wall height — independent of goal scale
+    crowdRows: 2, // fan rows in the band
   },
   // Crowd shirt tints per team. The shirt art is green, so tint (multiply) can't
   // produce pure team colours — these are SOFT warm/cool washes that read as two
   // distinct hinchadas without muddying the green.
   TEAM_COLORS: { human: 0xffc080, ai: 0x80c0ff },
 
-  // Keeper sits inside the goal mouth, ball in midfield, striker bottom-center.
+  // Keeper sits inside the goal mouth, ball in midfield, striker below.
   // Pushed down so they sit on the field, below the stands+wall (see GOAL.cy).
-  KEEPER_POS: { x: 384, y: 440 },
-  BALL_POS: { x: 384, y: 580 },
-  STRIKER_POS: { x: 384, y: 660 },
-  CHARACTER_SCALE: 4,
-  KEEPER_SCALE: 3.5, // keeper a bit smaller than the striker
-  BALL_RADIUS: 20,
+  KEEPER_POS: { x: 640, y: 270 },
+  BALL_POS: { x: 640, y: 360 },
+  STRIKER_POS: { x: 640, y: 440 },
+  CHARACTER_SCALE: 3.2,
+  KEEPER_SCALE: 2.8, // keeper a bit smaller than the striker
+  BALL_RADIUS: 16,
 
-  // Ball flight targets — goal scaleX 3.8 → ~395px wide, center 384,
-  // left edge ≈186, right ≈582. Thirds at ~249 / 384 / 519.
-  BALL_TARGET_LEFT: { x: 249, y: 410 },
-  BALL_TARGET_CENTER: { x: 384, y: 410 },
-  BALL_TARGET_RIGHT: { x: 519, y: 410 },
+  // Ball flight targets — goal scaleX 3.6 → ~374px wide, center 640,
+  // left/right offsets mirror the original portrait proportions (~0.68 of the
+  // goal half-width) so the shot spread still reads as "inside the posts".
+  BALL_TARGET_LEFT: { x: 513, y: 230 },
+  BALL_TARGET_CENTER: { x: 640, y: 230 },
+  BALL_TARGET_RIGHT: { x: 767, y: 230 },
 
   // Ground markings (penalty box + goal line + spot) drawn as vector lines
-  // directly on playerArea, so they scale with the screen like everything
-  // else in this container — no resize-time recomputation needed. The goal
-  // posts/net themselves are the real sprite (LAYOUT.GOAL); this box just
-  // frames the goal mouth + keeper + spot, like a real penalty area.
-  PITCH_BOX: { x: 150, y: 488, w: 468, h: 200 },
+  // directly on playerArea, at fixed pixel coordinates — no resize-time
+  // recomputation needed. The goal posts/net themselves are the real sprite
+  // (LAYOUT.GOAL); this box just frames the shooting area around the spot.
+  PITCH_BOX: { x: 460, y: 330, w: 360, h: 150 },
   PITCH_LINE_COLOR: 0xffffff,
   PENALTY_SPOT_RADIUS: 5,
 
-  // Side picker — three zones spanning the full goal mouth width (395px).
-  // Each zone 118px wide; together they cover 3×118=354px centred on 384.
-  GOAL_ZONE_SIZE: { w: 88, h: 148 },
+  // Side picker — three zones overlaid on the goal mouth, centred under each
+  // ball-flight target.
+  GOAL_ZONE_SIZE: { w: 100, h: 120 },
   GOAL_ZONES: {
-    left: { x: 230, y: 340 },
-    center: { x: 345, y: 340 },
-    right: { x: 457, y: 340 },
+    left: { x: 463, y: 160 },
+    center: { x: 590, y: 160 },
+    right: { x: 717, y: 160 },
   },
 
   // Hand (bottom) — passives on the left half, actives on the right half.
@@ -115,34 +116,34 @@ const LAYOUT = {
     cardW: 85,
     cardH: 118,
     gap: -28, // negative = overlap between cards
-    y: 900, // vertical centre of all cards
-    zoneW: 378, // width of each half-zone (2 × zoneW + divider = 768)
-    divider: 12, // gap between the two zones
+    y: 655, // vertical centre of all cards
+    zoneW: 600, // width of each half-zone (2 × zoneW + divider = 1280)
+    divider: 80, // gap between the two zones
   },
 
   // Tooltip bubble shown on card hover
   TOOLTIP: { w: 300, h: 120, pad: 14 },
 
-  // Confirm button — centred horizontally at the bottom
-  CONFIRM_BTN: { x: 299, y: 952, w: 170, h: 52 },
+  // Confirm button — centred horizontally, above the hand row (no overlap).
+  CONFIRM_BTN: { x: 555, y: 530, w: 170, h: 52 },
 
   // Card duel panel (during revealing, sidesMatched=true) — used to centre the
   // duel sprites/VS marker; backgrounds (drawn in _drawDuelBackground /
   // _onDuelClash / _buildDarkenOverlay / _buildResultPanel) cover the full
   // CANVAS_W × CANVAS_H screen.
-  DUEL_PANEL: { x: 24, y: 110, w: 720, h: 600 },
-  DUEL_CARD_HUMAN: { x: 60, y: 150, w: 280, h: 380 },
-  DUEL_CARD_AI: { x: 428, y: 150, w: 280, h: 380 },
+  DUEL_PANEL: { x: 0, y: 0, w: DESIGN_WIDTH, h: DESIGN_HEIGHT },
+  DUEL_CARD_HUMAN: { x: 180, y: 170, w: 280, h: 380 },
+  DUEL_CARD_AI: { x: 820, y: 170, w: 280, h: 380 },
 
   // Result panel
-  RESULT_TEXT: { x: 384, y: 470 },
-  NEXT_BTN: { x: 284, y: 580, w: 200, h: 60 },
+  RESULT_TEXT: { x: 640, y: 330 },
+  NEXT_BTN: { x: 540, y: 420, w: 200, h: 60 },
 
   // Game over panel
-  GAME_OVER_PANEL: { x: 0, y: 320, w: 768, h: 360 },
-  GAME_OVER_TEXT: { x: 384, y: 400 },
-  WINNER_TEXT: { x: 384, y: 490 },
-  FINAL_SCORE_TEXT: { x: 384, y: 580 },
+  GAME_OVER_PANEL: { x: 140, y: 100, w: 1000, h: 520 },
+  GAME_OVER_TEXT: { x: 640, y: 180 },
+  WINNER_TEXT: { x: 640, y: 300 },
+  FINAL_SCORE_TEXT: { x: 640, y: 400 },
 } as const;
 
 // ─── First-time tutorial ────────────────────────────────────────────────────
@@ -330,11 +331,6 @@ export class PenaltyScreen extends Container {
   private _tooltipBg!: Graphics;
   private _tooltipText!: Text;
 
-  // Last renderer size seen by resize() — used to lay out the environment when
-  // sprites are installed after the first resize.
-  private _lastW: number = LAYOUT.CANVAS_W;
-  private _lastH: number = LAYOUT.CANVAS_H;
-
   constructor() {
     super();
     this._buildContainers();
@@ -439,15 +435,6 @@ export class PenaltyScreen extends Container {
     }
     this.filters = [];
     this._crtFilter = null;
-  }
-
-  resize(w: number, h: number): void {
-    this._lastW = w;
-    this._lastH = h;
-    const sx = w / LAYOUT.CANVAS_W;
-    const sy = h / LAYOUT.CANVAS_H;
-    this._repositionPanels(sx, sy);
-    this._layoutEnvironment(w, h);
   }
 
   update(time: Ticker): void {
@@ -631,8 +618,10 @@ export class PenaltyScreen extends Container {
   }
 
   private _buildSettingsButton(panel: Container): void {
+    // Top-right corner, inside the score band — the hand row now owns the
+    // bottom of the screen in the landscape layout, so these icons moved up.
     const cx = LAYOUT.CANVAS_W - 26;
-    const cy = LAYOUT.CANVAS_H - 26;
+    const cy = LAYOUT.SCORE.h / 2;
     const gear = new Graphics();
 
     const TEETH = 8;
@@ -664,7 +653,7 @@ export class PenaltyScreen extends Container {
 
   private _buildTutorialButton(panel: Container): void {
     const cx = LAYOUT.CANVAS_W - 60;
-    const cy = LAYOUT.CANVAS_H - 26;
+    const cy = LAYOUT.SCORE.h / 2;
 
     const icon = new Graphics();
     icon.circle(cx, cy, 11).fill(0xf6eccf);
@@ -691,8 +680,8 @@ export class PenaltyScreen extends Container {
   private _buildPlayerArea(): Container {
     const panel = new Container();
 
-    // Ground markings: penalty box + goal line + spot. Drawn once in virtual
-    // coords — playerArea's own scale handles resizing, so these never need
+    // Ground markings: penalty box + goal line + spot. Drawn once at fixed
+    // canvas coordinates — the buffer never resizes, so these never need
     // per-resize recomputation like the screen-space environment does.
     // zIndex -1 keeps them behind the goal sprite/ball/characters once
     // _installSprites turns sortableChildren on.
@@ -876,10 +865,10 @@ export class PenaltyScreen extends Container {
     panel.addChild(this._duelLines);
 
     // Cards are centered in each half of the panel
-    const panelCx = LAYOUT.DUEL_PANEL.x + LAYOUT.DUEL_PANEL.w / 2; // 384
-    const panelCy = LAYOUT.DUEL_PANEL.y + LAYOUT.DUEL_PANEL.h / 2; // 410
-    const humanCx = LAYOUT.DUEL_PANEL.x + LAYOUT.DUEL_PANEL.w / 4; // 204
-    const aiCx = LAYOUT.DUEL_PANEL.x + (LAYOUT.DUEL_PANEL.w * 3) / 4; // 564
+    const panelCx = LAYOUT.DUEL_PANEL.x + LAYOUT.DUEL_PANEL.w / 2;
+    const panelCy = LAYOUT.DUEL_PANEL.y + LAYOUT.DUEL_PANEL.h / 2;
+    const humanCx = LAYOUT.DUEL_PANEL.x + LAYOUT.DUEL_PANEL.w / 4;
+    const aiCx = LAYOUT.DUEL_PANEL.x + (LAYOUT.DUEL_PANEL.w * 3) / 4;
     const nameY = LAYOUT.DUEL_PANEL.y + 60;
 
     this._duelHumanSprite = new Sprite();
@@ -936,8 +925,8 @@ export class PenaltyScreen extends Container {
 
   /** Draws the split background + speed lines with the given team kit colors. */
   private _drawDuelBackground(humanColor: number, aiColor: number): void {
-    const cx = 384; // canvas center x (split point)
-    const panelCy = LAYOUT.DUEL_PANEL.y + LAYOUT.DUEL_PANEL.h / 2; // 410
+    const cx = LAYOUT.CANVAS_W / 2; // canvas center x (split point)
+    const panelCy = LAYOUT.DUEL_PANEL.y + LAYOUT.DUEL_PANEL.h / 2;
 
     // Left half tinted rect (human color) — spans the full screen height
     this._duelBgLeft.clear();
@@ -1115,7 +1104,7 @@ export class PenaltyScreen extends Container {
     // behind everything, so it fills any window without stretching the art.
     this._buildEnvironment(bundle.stands, bundle.scorePanel);
     if (this._environment) this.addChildAt(this._environment, 0);
-    this._layoutEnvironment(this._lastW, this._lastH);
+    this._layoutEnvironment(LAYOUT.CANVAS_W, LAYOUT.CANVAS_H);
 
     // Real pitch/goal sprite — at the back of playerArea (behind characters and
     // ball), centered, anchored at 0.5 so it never deforms.
@@ -1157,9 +1146,13 @@ export class PenaltyScreen extends Container {
     const coin = new Sprite(bundle.coinFrames[0]);
     coin.anchor.set(0.5);
     coin.visible = false;
+    // Fixed position/scale — centred on the goal, at the duel panel's vertical
+    // centre, since the buffer is constant and there's no resize-time reflow.
+    coin.x = LAYOUT.GOAL.cx;
+    coin.y = LAYOUT.DUEL_PANEL.y + LAYOUT.DUEL_PANEL.h / 2;
+    coin.scale.set(7);
     this._coinSprite = coin;
     // Added to root container (after duelPanel) so it renders above the card duel panel.
-    // Position and scale are managed by _repositionPanels.
     this.addChild(coin);
   }
 
@@ -2061,41 +2054,6 @@ export class PenaltyScreen extends Container {
       if (elapsed >= 120) ticker.remove(fadeIn);
     };
     ticker.add(fadeIn);
-  }
-
-  // ─── Private: resize — reposition panels ─────────────────────────────────
-
-  private _repositionPanels(sx: number, sy: number): void {
-    const panels: Container[] = [
-      this.scoreDisplay,
-      this.playerArea,
-      this.sidePicker,
-      this.cardRow,
-      this.actionRow,
-      this.confirmButton,
-      this.darkenOverlay,
-      this.duelPanel,
-      this.resultPanel,
-      this.gameOverPanel,
-    ];
-    for (const p of panels) {
-      p.x = 0;
-      p.y = 0;
-      p.scale.set(sx, sy);
-    }
-    // Score and Confirm have non-zero base positions
-    this.scoreDisplay.x = LAYOUT.SCORE.x * sx;
-    this.scoreDisplay.y = LAYOUT.SCORE.y * sy;
-    this.confirmButton.x = LAYOUT.CONFIRM_BTN.x * sx;
-    this.confirmButton.y = LAYOUT.CONFIRM_BTN.y * sy;
-    // Reset confirm scale (it was just zeroed by the loop)
-    this.confirmButton.scale.set(sx, sy);
-    // Coin lives in the root container (above duelPanel) — position and scale manually.
-    if (this._coinSprite) {
-      this._coinSprite.x = LAYOUT.GOAL.cx * sx;
-      this._coinSprite.y = 410 * sy;
-      this._coinSprite.scale.set(7 * sx, 7 * sy);
-    }
   }
 
   // ─── Private: helpers ─────────────────────────────────────────────────────
