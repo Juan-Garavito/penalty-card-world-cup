@@ -100,7 +100,6 @@ inject();
 
   await engine.init({
     background: "#1E1E1E",
-    resizeOptions: { minWidth: 768, minHeight: 1024, letterbox: false },
   });
 
   registerSounds();

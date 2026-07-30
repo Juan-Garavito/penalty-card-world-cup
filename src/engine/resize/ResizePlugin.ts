@@ -7,6 +7,7 @@ import type {
 } from "pixi.js";
 
 import { resize } from "./resize";
+import { DESIGN_WIDTH, DESIGN_HEIGHT } from "./designSize";
 
 // Custom utility type:
 export type DeepRequired<T> = Required<{
@@ -15,18 +16,13 @@ export type DeepRequired<T> = Required<{
 
 /**
  * Application options for the CreationResizePlugin.
+ *
+ * The render buffer size is fixed (see `designSize.ts`) and is no longer
+ * configurable per-Application — there is nothing to opt into here beyond
+ * what PixiJS's own `ResizePluginOptions` (`resizeTo`) already provides.
  */
-export interface CreationResizePluginOptions extends ResizePluginOptions {
-  /** Options for controlling the resizing of the application */
-  resizeOptions?: {
-    /** Minimum width of the application */
-    minWidth?: number;
-    /** Minimum height of the application */
-    minHeight?: number;
-    /** Whether to letterbox the application when resizing */
-    letterbox?: boolean;
-  };
-}
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type
+export interface CreationResizePluginOptions extends ResizePluginOptions {}
 
 /**
  * Middleware for Application's resize functionality.
@@ -36,7 +32,6 @@ export interface CreationResizePluginOptions extends ResizePluginOptions {
  * * Application#resize
  * * Application#queueResize
  * * Application#cancelResize
- * * Application#resizeOptions
  */
 export class CreationResizePlugin {
   /** @ignore */
@@ -119,19 +114,21 @@ export class CreationResizePlugin {
         canvasHeight = clientHeight;
       }
 
-      const { width, height } = resize(
+      const { cssWidth, cssHeight } = resize(
         canvasWidth,
         canvasHeight,
-        app.resizeOptions.minWidth,
-        app.resizeOptions.minHeight,
-        app.resizeOptions.letterbox,
+        DESIGN_WIDTH,
+        DESIGN_HEIGHT,
       );
 
-      app.renderer.canvas.style.width = `${canvasWidth}px`;
-      app.renderer.canvas.style.height = `${canvasHeight}px`;
+      // The CSS box is the ONLY thing that scales/letterboxes to the real
+      // viewport — the render buffer below always stays the fixed design
+      // size, so screens never see anything but a constant 1280x720.
+      app.renderer.canvas.style.width = `${cssWidth}px`;
+      app.renderer.canvas.style.height = `${cssHeight}px`;
       window.scrollTo(0, 0);
 
-      app.renderer.resize(width, height);
+      app.renderer.resize(DESIGN_WIDTH, DESIGN_HEIGHT);
     };
 
     this._cancelResize = (): void => {
@@ -142,12 +139,6 @@ export class CreationResizePlugin {
     };
     this._resizeId = null;
     this._resizeTo = null;
-    app.resizeOptions = {
-      minWidth: 768,
-      minHeight: 1024,
-      letterbox: true,
-      ...options.resizeOptions,
-    };
     app.resizeTo =
       options.resizeTo || (null as unknown as Window | HTMLElement);
   }

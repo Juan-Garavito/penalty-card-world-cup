@@ -1,12 +1,14 @@
 /**
  * Shows a "rotate your device" DOM overlay when the game is viewed on a
- * narrow, portrait-oriented viewport (phones held vertically). The game's
- * virtual canvas is always landscape (1280x720) — see HomeScreen.ts,
- * LoadingScreen.ts — so portrait phones render cramped/broken without this.
+ * narrow, portrait-oriented viewport (phones held vertically). The engine's
+ * render buffer is always the fixed landscape design size (1280x720) — see
+ * engine/resize/designSize.ts, the single source of truth shared by every
+ * Screen — so portrait phones render cramped/broken without this.
  *
  * Pure DOM/CSS feature: toggles a class on <body>; never touches the Pixi
  * canvas, ticker, or CreationResizePlugin/resize.ts (those keep scaling the
- * canvas exactly as before — this overlay just sits visually on top of it).
+ * canvas's CSS box exactly as before — this overlay just sits visually on
+ * top of it).
  */
 // `pointer: coarse` targets touchscreens specifically — unlike a max-width
 // threshold, it never false-positives on a narrow-but-tall desktop browser
