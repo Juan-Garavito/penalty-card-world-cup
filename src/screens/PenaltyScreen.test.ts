@@ -1,7 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { Container } from "pixi.js";
-import { PenaltyScreen, setPendingPresenter, setPendingTeamColors } from "./PenaltyScreen.ts";
+import {
+  PenaltyScreen,
+  setPendingPresenter,
+  setPendingTeamColors,
+  LAYOUT,
+} from "./PenaltyScreen.ts";
 import type { PenaltyViewModel } from "./PenaltyPresenter.ts";
+import { DESIGN_WIDTH, DESIGN_HEIGHT } from "../engine/resize/designSize.ts";
 
 // ─── Mock Presenter ────────────────────────────────────────────────────────────
 
@@ -114,13 +120,17 @@ describe("PenaltyScreen — Phase 14: skeleton", () => {
     expect(screen.children.length).toBe(0);
   });
 
-  it("resize(w, h) does not throw", () => {
+  it("SCEN-PS-RESIZE: screen has no self-scaling resize() — the fixed-buffer engine drives layout instead", () => {
     const screen = new PenaltyScreen();
     const presenter = makeMockPresenter();
     setPendingPresenter(presenter as never);
     screen.prepare();
-    expect(() => screen.resize(768, 1024)).not.toThrow();
-    expect(() => screen.resize(375, 812)).not.toThrow();
+    const asAppScreen = screen as unknown as {
+      resize?: (w: number, h: number) => void;
+    };
+    expect(asAppScreen.resize).toBeUndefined();
+    expect(screen.scale.x).toBe(1);
+    expect(screen.scale.y).toBe(1);
   });
 });
 
@@ -310,18 +320,61 @@ describe("PenaltyScreen — Phase 18: revealing auto-advance", () => {
   });
 });
 
-// ─── Phase 17: resize ────────────────────────────────────────────────────────
+// ─── Phase 17: landscape layout (mobile-aspect-scaling PR3) ──────────────────
 
-describe("PenaltyScreen — Phase 17: resize", () => {
-  it("resize repositions children without throwing at non-default dimensions", async () => {
+describe("PenaltyScreen — Phase 17: landscape layout invariants", () => {
+  it("SCEN-PS-CANVAS-LANDSCAPE: LAYOUT canvas matches the shared fixed design buffer (1280x720)", () => {
+    expect(LAYOUT.CANVAS_W).toBe(DESIGN_WIDTH);
+    expect(LAYOUT.CANVAS_H).toBe(DESIGN_HEIGHT);
+  });
+
+  it("SCEN-PS-HAND-ZONES-FIT: passive/active hand zones + divider exactly span the canvas width", () => {
+    expect(LAYOUT.HAND.zoneW * 2 + LAYOUT.HAND.divider).toBe(LAYOUT.CANVAS_W);
+  });
+
+  it("SCEN-PS-GOAL-ZONES-IN-BOUNDS: all three side-picker zones stay within canvas bounds", () => {
+    const { w, h } = LAYOUT.GOAL_ZONE_SIZE;
+    for (const zone of Object.values(LAYOUT.GOAL_ZONES)) {
+      expect(zone.x).toBeGreaterThanOrEqual(0);
+      expect(zone.y).toBeGreaterThanOrEqual(0);
+      expect(zone.x + w).toBeLessThanOrEqual(LAYOUT.CANVAS_W);
+      expect(zone.y + h).toBeLessThanOrEqual(LAYOUT.CANVAS_H);
+    }
+  });
+
+  it("SCEN-PS-CONFIRM-NO-OVERLAP: confirm button sits above the hand row with no vertical overlap", () => {
+    const confirmBottom = LAYOUT.CONFIRM_BTN.y + LAYOUT.CONFIRM_BTN.h;
+    const handTop = LAYOUT.HAND.y - LAYOUT.HAND.cardH / 2;
+    expect(confirmBottom).toBeLessThanOrEqual(handTop);
+  });
+
+  it("SCEN-PS-HAND-IN-BOUNDS: hand row (cards) stays within canvas height", () => {
+    const handBottom = LAYOUT.HAND.y + LAYOUT.HAND.cardH / 2;
+    expect(handBottom).toBeLessThanOrEqual(LAYOUT.CANVAS_H);
+  });
+
+  it("SCEN-PS-INTERACTIVE-BOUNDS: gear/tutorial corner icons stay within canvas bounds", () => {
     const screen = new PenaltyScreen();
     const presenter = makeMockPresenter();
     setPendingPresenter(presenter as never);
     screen.prepare();
-    await screen.show();
-    expect(() => screen.resize(375, 667)).not.toThrow();
-    expect(() => screen.resize(1920, 1080)).not.toThrow();
-    expect(() => screen.resize(768, 1024)).not.toThrow();
+    // scoreDisplay children: [badge, gear, mark? ...] — gear/tutorial are Graphics
+    // with an explicit hitArea Rectangle; assert every hitArea on scoreDisplay's
+    // subtree stays inside the fixed 1280x720 buffer.
+    const walk = (c: Container): void => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const hitArea = (c as any).hitArea as
+        | { x: number; y: number; width: number; height: number }
+        | undefined;
+      if (hitArea) {
+        expect(hitArea.x).toBeGreaterThanOrEqual(0);
+        expect(hitArea.y).toBeGreaterThanOrEqual(0);
+        expect(hitArea.x + hitArea.width).toBeLessThanOrEqual(LAYOUT.CANVAS_W);
+        expect(hitArea.y + hitArea.height).toBeLessThanOrEqual(LAYOUT.CANVAS_H);
+      }
+      for (const child of c.children) walk(child as Container);
+    };
+    walk(screen.scoreDisplay);
   });
 });
 
