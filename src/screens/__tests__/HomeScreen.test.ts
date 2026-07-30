@@ -39,12 +39,16 @@ describe("HomeScreen", () => {
     await expect(screen.hide()).resolves.toBeUndefined();
   });
 
-  it("resize() does not throw", () => {
+  it("has no self-scaling resize() — the fixed-buffer engine drives layout instead", () => {
     const screen = new HomeScreen();
     setPendingOnStart(vi.fn());
     screen.prepare();
-    expect(() => screen.resize(1280, 720)).not.toThrow();
-    expect(() => screen.resize(800, 600)).not.toThrow();
+    const asAppScreen = screen as unknown as {
+      resize?: (w: number, h: number) => void;
+    };
+    expect(asAppScreen.resize).toBeUndefined();
+    expect(screen.scale.x).toBe(1);
+    expect(screen.scale.y).toBe(1);
   });
 
   it("has children after prepare()", () => {

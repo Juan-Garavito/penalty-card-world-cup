@@ -9,11 +9,12 @@ import { makeText } from "./utils/UIComponents.ts";
 import { createCRTFilter } from "./filters/CRTFilter.ts";
 import { sfx } from "../engine/audio/audio.ts";
 import { SOUND_ALIASES } from "../engine/audio/sounds.ts";
+import { DESIGN_WIDTH, DESIGN_HEIGHT } from "../engine/resize/designSize.ts";
 
 // ─── Layout ──────────────────────────────────────────────────────────────────
 
-const W = 1280;
-const H = 720;
+const W = DESIGN_WIDTH;
+const H = DESIGN_HEIGHT;
 
 const TOP_BAR_H = 40;
 const SECTION_H = 28;
@@ -146,10 +147,6 @@ export class GroupStageScreen extends Container {
     this._group = null;
     this._displayGroupIdx = 0;
     this._playerGroupIdx = 0;
-  }
-
-  resize(w: number, h: number): void {
-    this.scale.set(w / W, h / H);
   }
 
   // ─── Init ────────────────────────────────────────────────────────────────

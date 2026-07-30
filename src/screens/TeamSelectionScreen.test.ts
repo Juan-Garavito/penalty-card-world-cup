@@ -97,12 +97,16 @@ describe("TeamSelectionScreen", () => {
     await expect(screen.show()).resolves.toBeUndefined();
   });
 
-  it("resize() does not throw", () => {
+  it("has no self-scaling resize() — the fixed-buffer engine drives layout instead", () => {
     const screen = new TeamSelectionScreen();
     setPendingOnSelect(vi.fn());
     screen.prepare();
-    expect(() => screen.resize(768, 1024)).not.toThrow();
-    expect(() => screen.resize(375, 812)).not.toThrow();
+    const asAppScreen = screen as unknown as {
+      resize?: (w: number, h: number) => void;
+    };
+    expect(asAppScreen.resize).toBeUndefined();
+    expect(screen.scale.x).toBe(1);
+    expect(screen.scale.y).toBe(1);
   });
 
   it("has children after prepare", () => {

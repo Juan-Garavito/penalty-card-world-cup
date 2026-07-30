@@ -139,10 +139,14 @@ describe("GroupStageScreen", () => {
     await expect(screen.show()).resolves.toBeUndefined();
   });
 
-  it("resize() does not throw", () => {
+  it("has no self-scaling resize() — the fixed-buffer engine drives layout instead", () => {
     const screen = makeScreen();
-    expect(() => screen.resize(768, 1024)).not.toThrow();
-    expect(() => screen.resize(375, 667)).not.toThrow();
+    const asAppScreen = screen as unknown as {
+      resize?: (w: number, h: number) => void;
+    };
+    expect(asAppScreen.resize).toBeUndefined();
+    expect(screen.scale.x).toBe(1);
+    expect(screen.scale.y).toBe(1);
   });
 
   it("SCEN-ELIM-QUALIFIED: player wins all 3 → CONTINUE TO KNOCKOUT button present, no VIEW BRACKET", () => {

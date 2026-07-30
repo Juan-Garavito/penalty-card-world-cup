@@ -1,11 +1,12 @@
 import { Container, Graphics, Text, Ticker } from "pixi.js";
 import { animate } from "motion";
 import { drawPixelBorder, makeText } from "./utils/UIComponents.ts";
+import { DESIGN_WIDTH, DESIGN_HEIGHT } from "../engine/resize/designSize.ts";
 
 // ─── Layout (virtual canvas, matches HomeScreen's 1280×720) ──────────────────
 
-const W = 1280;
-const H = 720;
+const W = DESIGN_WIDTH;
+const H = DESIGN_HEIGHT;
 
 const BAR_W = 360;
 const BAR_H = 24;
@@ -65,10 +66,6 @@ export class LoadingScreen extends Container {
     this._studioText = null;
     this._tweenState = { value: 0 };
     this._fadeState = { alpha: 0 };
-  }
-
-  resize(w: number, h: number): void {
-    this.scale.set(w / W, h / H);
   }
 
   update(t: Ticker): void {

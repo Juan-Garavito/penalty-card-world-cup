@@ -147,10 +147,14 @@ describe("LoadingScreen", () => {
     expect(screen.children.length).toBe(0);
   });
 
-  it("SCEN-LS-RESIZE: resize() does not throw", () => {
+  it("SCEN-LS-RESIZE: screen has no self-scaling resize() — the fixed-buffer engine drives layout instead", () => {
     const screen = makeScreen();
-    expect(() => screen.resize(1280, 720)).not.toThrow();
-    expect(() => screen.resize(1920, 1080)).not.toThrow();
+    const asAppScreen = screen as unknown as {
+      resize?: (w: number, h: number) => void;
+    };
+    expect(asAppScreen.resize).toBeUndefined();
+    expect(screen.scale.x).toBe(1);
+    expect(screen.scale.y).toBe(1);
   });
 
   it("SCEN-LS-SHOW-HIDE: show() and hide() resolve without throwing", async () => {

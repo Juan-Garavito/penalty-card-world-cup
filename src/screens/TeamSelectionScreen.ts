@@ -12,11 +12,12 @@ import { makeText, confColor, drawPixelBorder } from "./utils/UIComponents.ts";
 import { createCRTFilter } from "./filters/CRTFilter.ts";
 import { sfx } from "../engine/audio/audio.ts";
 import { SOUND_ALIASES } from "../engine/audio/sounds.ts";
+import { DESIGN_WIDTH, DESIGN_HEIGHT } from "../engine/resize/designSize.ts";
 
 // ─── Layout ──────────────────────────────────────────────────────────────────
 
-const W = 1280;
-const H = 720;
+const W = DESIGN_WIDTH;
+const H = DESIGN_HEIGHT;
 
 const LEFT_W = 380;
 const RIGHT_W = 900;
@@ -103,10 +104,6 @@ export class TeamSelectionScreen extends Container {
     this._activeConf = "ALL";
     this._scrollY = 0;
     this._crtFilter = null;
-  }
-
-  resize(w: number, h: number): void {
-    this.scale.set(w / W, h / H);
   }
 
   // ─── Build ──────────────────────────────────────────────────────────────

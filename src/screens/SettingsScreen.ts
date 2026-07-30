@@ -9,11 +9,12 @@ import {
 } from "../engine/audio/audioSettings.ts";
 import type { AudioSettings } from "../engine/audio/audioSettings.ts";
 import { createCRTFilter } from "./filters/CRTFilter.ts";
+import { DESIGN_WIDTH, DESIGN_HEIGHT } from "../engine/resize/designSize.ts";
 
 // ─── Layout (virtual canvas, matches HomeScreen's 1280×720) ──────────────────
 
-const W = 1280;
-const H = 720;
+const W = DESIGN_WIDTH;
+const H = DESIGN_HEIGHT;
 
 const PANEL = { x: W / 2 - 260, y: H / 2 - 180, w: 520, h: 360 };
 
@@ -83,10 +84,6 @@ export class SettingsScreen extends Container {
     this.filters = [];
     this._crtFilter = null;
     this.removeChildren();
-  }
-
-  resize(w: number, h: number): void {
-    this.scale.set(w / W, h / H);
   }
 
   // ─── Build ──────────────────────────────────────────────────────────────

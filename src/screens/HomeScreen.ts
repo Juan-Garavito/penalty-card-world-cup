@@ -7,11 +7,12 @@ import { sfx } from "../engine/audio/audio.ts";
 import { SOUND_ALIASES } from "../engine/audio/sounds.ts";
 import { SettingsScreen } from "./SettingsScreen.ts";
 import { TutorialScreen } from "./TutorialScreen.ts";
+import { DESIGN_WIDTH, DESIGN_HEIGHT } from "../engine/resize/designSize.ts";
 
 // ─── Layout ──────────────────────────────────────────────────────────────────
 
-const W = 1280;
-const H = 720;
+const W = DESIGN_WIDTH;
+const H = DESIGN_HEIGHT;
 const SPLIT_Y = 340; // divides stadium top from pitch bottom
 
 // ─── Pending slot ─────────────────────────────────────────────────────────────
@@ -69,10 +70,6 @@ export class HomeScreen extends Container {
     this.filters = [];
     this._onStart = null;
     this._crtFilter = null;
-  }
-
-  resize(w: number, h: number): void {
-    this.scale.set(w / W, h / H);
   }
 
   // ─── Build ──────────────────────────────────────────────────────────────

@@ -3,11 +3,12 @@ import { engine } from "../engine/instance.ts";
 import { sfx } from "../engine/audio/audio.ts";
 import { SOUND_ALIASES } from "../engine/audio/sounds.ts";
 import { createCRTFilter } from "./filters/CRTFilter.ts";
+import { DESIGN_WIDTH, DESIGN_HEIGHT } from "../engine/resize/designSize.ts";
 
 // ─── Layout (virtual canvas, matches HomeScreen's 1280×720) ──────────────────
 
-const W = 1280;
-const H = 720;
+const W = DESIGN_WIDTH;
+const H = DESIGN_HEIGHT;
 
 const PANEL = { x: W / 2 - 450, y: H / 2 - 310, w: 900, h: 620 };
 const DIAGRAM = { x: 40, y: 96, w: 820, h: 170 };
@@ -181,10 +182,6 @@ export class TutorialScreen extends Container {
     this.removeChildren();
     this._content = null;
     this._dots = [];
-  }
-
-  resize(w: number, h: number): void {
-    this.scale.set(w / W, h / H);
   }
 
   // ─── Build (static chrome) ─────────────────────────────────────────────────
