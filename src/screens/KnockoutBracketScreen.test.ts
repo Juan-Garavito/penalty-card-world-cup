@@ -132,9 +132,13 @@ describe("KnockoutBracketScreen", () => {
     await expect(screen.show()).resolves.toBeUndefined();
   });
 
-  it("resize() does not throw", () => {
+  it("has no self-scaling resize() method (fixed 1280x720 buffer)", () => {
     const screen = makeScreen();
-    expect(() => screen.resize(768, 1024)).not.toThrow();
+    expect(
+      (screen as unknown as { resize?: unknown }).resize,
+    ).toBeUndefined();
+    expect(screen.scale.x).toBe(1);
+    expect(screen.scale.y).toBe(1);
   });
 
   // ─── Interactive mode ────────────────────────────────────────────────────────
@@ -422,33 +426,36 @@ describe("KnockoutBracketScreen", () => {
     ).length;
   }
 
+  // Landscape 1280x720 column x-anchors: r32=40, r16=250, qf=460, sf=670,
+  // final=880, champ=1090 (margin 40, MATCH_W=150, gap=60).
+
   it("BRKT-001: r32 column has 16 match panels", () => {
     const screen = makeScreen();
-    expect(countMatchPanels(screen, 4)).toBe(16);
+    expect(countMatchPanels(screen, 40)).toBe(16);
   });
 
   it("BRKT-002: r16 column has 8 match panels", () => {
     const screen = makeScreen();
-    expect(countMatchPanels(screen, 128)).toBe(8);
+    expect(countMatchPanels(screen, 250)).toBe(8);
   });
 
   it("BRKT-003: qf column has 4 match panels", () => {
     const screen = makeScreen();
-    expect(countMatchPanels(screen, 252)).toBe(4);
+    expect(countMatchPanels(screen, 460)).toBe(4);
   });
 
   it("BRKT-004: sf column has 2 match panels", () => {
     const screen = makeScreen();
-    // SF panels only — 3rd place panel is also at x=376 but we only expect 2 SF panels
-    // The 3rd place panel is a SEPARATE panel below SF; we still count 2+1=3 Containers at 376
-    // Actually: 2 SF panels + 1 3rd-place panel = 3 plain containers at x=376
-    // So we test that at least 2 exist at x=376 (the two SF match panels)
-    expect(countMatchPanels(screen, 376)).toBeGreaterThanOrEqual(2);
+    // SF panels only — 3rd place panel is also at x=670 but we only expect 2 SF panels
+    // The 3rd place panel is a SEPARATE panel below SF; we still count 2+1=3 Containers at 670
+    // Actually: 2 SF panels + 1 3rd-place panel = 3 plain containers at x=670
+    // So we test that at least 2 exist at x=670 (the two SF match panels)
+    expect(countMatchPanels(screen, 670)).toBeGreaterThanOrEqual(2);
   });
 
   it("BRKT-005: final column has 1 match panel", () => {
     const screen = makeScreen();
-    expect(countMatchPanels(screen, 500)).toBe(1);
+    expect(countMatchPanels(screen, 880)).toBe(1);
   });
 
   it("BRKT-006: connector Graphics node exists somewhere in the tree", () => {

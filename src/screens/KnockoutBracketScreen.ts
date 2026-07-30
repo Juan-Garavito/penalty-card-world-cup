@@ -15,37 +15,39 @@ import { getTeamById } from "../entities/Tournament/TeamData.ts";
 import { createCRTFilter } from "./filters/CRTFilter.ts";
 import { sfx } from "../engine/audio/audio.ts";
 import { SOUND_ALIASES } from "../engine/audio/sounds.ts";
+import { DESIGN_WIDTH, DESIGN_HEIGHT } from "../engine/resize/designSize.ts";
 
-// ─── Layout ──────────────────────────────────────────────────────────────────
+// ─── Layout (fixed landscape 1280x720 buffer — see designSize.ts) ─────────────
 
-const W = 768;
-const H = 1024;
+const W = DESIGN_WIDTH;
+const H = DESIGN_HEIGHT;
 const TOP_BAR_H = 40;
-const SECTION_H = 26;
-const COL_LABEL_H = 30;
-const CONTENT_TOP = TOP_BAR_H + SECTION_H + COL_LABEL_H; // 96
-const CONTENT_BOT = 996;
-const COL_W = 120;
-const MATCH_W = 120;
-const FLAG_W = 18;
-const FLAG_H = 12;
-const TEAM_ROW_H = 24;
+const COL_LABEL_Y = TOP_BAR_H + 6; // 46
+const CONTENT_TOP = COL_LABEL_Y + 24; // 70 — room for the label row + buffer
+const CONTENT_BOT = H - 48; // 672 — 48px reserved for the bottom action button
+const MATCH_W = 150;
+const COL_GAP = 60;
+const FLAG_W = 15;
+const FLAG_H = 10;
+const TEAM_ROW_H = 15;
 
 // Larger panels for rounds with spare vertical room (r16/qf/sf/final/3rd)
-const MATCH_H_COMPACT = 52; // r32 — 16 matches, vertical space is the limit
-const MATCH_H_LARGE = 100; // r16, qf, sf, final, 3rd place
-const FLAG_W_LARGE = 28;
-const FLAG_H_LARGE = 18;
-const TEAM_ROW_H_LARGE = 34;
+const MATCH_H_COMPACT = 34; // r32 — 16 matches, vertical space is the limit
+const MATCH_H_LARGE = 68; // r16, qf, sf, final, 3rd place
+const FLAG_W_LARGE = 20;
+const FLAG_H_LARGE = 13;
+const TEAM_ROW_H_LARGE = 22;
 
-// Column x anchors (left edge of each panel)
+// Column x anchors (left edge of each panel). Landscape gives 1280px of
+// width vs. the old portrait canvas's 768 — columns spread out with wider
+// panels (150 vs 120) and a generous 60px gap instead of being squeezed.
 const COL_X: Record<string, number> = {
-  r32: 4,
-  r16: 128,
-  qf: 252,
-  sf: 376,
-  final: 500,
-  champ: 624,
+  r32: 40,
+  r16: 40 + (MATCH_W + COL_GAP), // 250
+  qf: 40 + 2 * (MATCH_W + COL_GAP), // 460
+  sf: 40 + 3 * (MATCH_W + COL_GAP), // 670
+  final: 40 + 4 * (MATCH_W + COL_GAP), // 880
+  champ: 40 + 5 * (MATCH_W + COL_GAP), // 1090
 };
 
 // Match panel height per round
@@ -57,13 +59,16 @@ const MATCH_H_BY_PHASE: Record<string, number> = {
   final: MATCH_H_LARGE,
 };
 
-// Vertical spacing (center-to-center) per round
+// Vertical spacing (center-to-center) per round — each round roughly doubles
+// the previous one's spacing so the bracket visually converges, same
+// proportions as the old portrait layout, recalibrated for the smaller
+// available content height (602px vs. the old 900px).
 const SPACING: Record<string, number> = {
-  r32: 55,
-  r16: 108,
-  qf: 216,
-  sf: 432,
-  final: 432,
+  r32: 37,
+  r16: 74,
+  qf: 148,
+  sf: 296,
+  final: 296,
 };
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
@@ -176,10 +181,6 @@ export class KnockoutBracketScreen extends Container {
     this._viewOnlyChampion = null;
   }
 
-  resize(w: number, h: number): void {
-    this.scale.set(w / W, h / H);
-  }
-
   // ─── Build ───────────────────────────────────────────────────────────────
 
   private _build(): void {
@@ -192,7 +193,7 @@ export class KnockoutBracketScreen extends Container {
     this._buildTopBar();
 
     // Column labels
-    const colLabelY = TOP_BAR_H + SECTION_H + 5;
+    const colLabelY = COL_LABEL_Y;
     const colLabelKeys: Array<{ key: string; label: string }> = [
       { key: "r32", label: "R32" },
       { key: "r16", label: "R16" },
@@ -471,7 +472,7 @@ export class KnockoutBracketScreen extends Container {
     // Score — one value per team row (vertical pairing), right-anchored so
     // it always stays within MATCH_W regardless of digit count.
     if (match.homeGoals !== null && match.awayGoals !== null) {
-      const scoreFontSize = large ? 18 : 9;
+      const scoreFontSize = large ? 13 : 7;
       const scoreX = MATCH_W - (large ? 10 : 6);
       this._addScoreText(
         panel,
@@ -505,7 +506,7 @@ export class KnockoutBracketScreen extends Container {
 
     const flagW = large ? FLAG_W_LARGE : FLAG_W;
     const flagH = large ? FLAG_H_LARGE : FLAG_H;
-    const fontSize = large ? 14 : 9;
+    const fontSize = large ? 11 : 7;
     const rowH = large ? TEAM_ROW_H_LARGE : TEAM_ROW_H;
 
     // Try full team data for flag and abbreviation
