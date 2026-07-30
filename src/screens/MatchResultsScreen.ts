@@ -6,9 +6,10 @@ import { makeText } from "./utils/UIComponents.ts";
 import { createCRTFilter } from "./filters/CRTFilter.ts";
 import { bgm, sfx } from "../engine/audio/audio.ts";
 import { SOUND_ALIASES } from "../engine/audio/sounds.ts";
+import { DESIGN_WIDTH, DESIGN_HEIGHT } from "../engine/resize/designSize.ts";
 
-const W = 768;
-const H = 1024;
+const W = DESIGN_WIDTH;
+const H = DESIGN_HEIGHT;
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
 
@@ -22,9 +23,11 @@ const LOSE_COLOR = 0xFF5566;
 
 // ─── Layout ──────────────────────────────────────────────────────────────────
 
-const CONTENT_BOT = 928; // leaves room for the continue button
-const MAX_ROW_H   = 108;
-const GROUP_HEADER_H = 28;
+const HEADER_H   = 40;
+const BANNER_H   = 40;
+const CONTENT_BOT = 648; // leaves room for the continue button
+const MAX_ROW_H   = 72;
+const GROUP_HEADER_H = 20;
 const GRID_GAP   = 8;
 
 // ─── Config ───────────────────────────────────────────────────────────────────
@@ -105,10 +108,6 @@ export class MatchResultsScreen extends Container {
     this._config = null;
   }
 
-  resize(w: number, h: number): void {
-    this.scale.set(w / W, h / H);
-  }
-
   // ─── Private ─────────────────────────────────────────────────────────────
 
   private _onContinue(): void {
@@ -129,10 +128,10 @@ export class MatchResultsScreen extends Container {
     this.addChild(bg);
 
     // Header
-    const header = makeText(`${cfg.roundTitle} — RESULTS`, "title", 22, GOLD);
+    const header = makeText(`${cfg.roundTitle} — RESULTS`, "title", 18, GOLD);
     header.anchor.set(0.5, 0);
     header.x = W / 2;
-    header.y = 24;
+    header.y = 10;
     this.addChild(header);
 
     // Champion banner (elimination summary) or player result banner
@@ -150,7 +149,7 @@ export class MatchResultsScreen extends Container {
 
     // Match grid — fills the remaining space, splitting into columns when
     // there are many groups (matchday results) or many matches (e.g. R32).
-    const contentTop = hasBanner ? 132 : 76;
+    const contentTop = hasBanner ? HEADER_H + BANNER_H + 16 : HEADER_H + 16;
     this._buildGroups(cfg, contentTop);
 
     this.addChild(this._buildContinueBtn());
@@ -183,21 +182,21 @@ export class MatchResultsScreen extends Container {
 
   private _buildChampionBanner(champion: WorldCupTeam): Container {
     const banner = new Container();
-    banner.y = 64;
+    banner.y = HEADER_H + 8;
 
     const bg = new Graphics();
-    bg.rect(0, 0, W, 56).fill({ color: PANEL }).stroke({ color: GOLD, width: 2 });
+    bg.rect(0, 0, W, BANNER_H).fill({ color: PANEL }).stroke({ color: GOLD, width: 2 });
     banner.addChild(bg);
 
-    const flag = FlagRenderer.make(champion.flagSpec, 36, 24);
+    const flag = FlagRenderer.make(champion.flagSpec, 32, 22);
     flag.x = W / 2 - 140;
-    flag.y = 16;
+    flag.y = (BANNER_H - 22) / 2;
     banner.addChild(flag);
 
     const txt = makeText(`CHAMPION: ${champion.name}`, "title", 16, GOLD);
     txt.anchor.set(0, 0.5);
-    txt.x = W / 2 - 90;
-    txt.y = 28;
+    txt.x = W / 2 - 96;
+    txt.y = BANNER_H / 2;
     banner.addChild(txt);
 
     return banner;
@@ -224,16 +223,16 @@ export class MatchResultsScreen extends Container {
     }
 
     const banner = new Container();
-    banner.y = 64;
+    banner.y = HEADER_H + 8;
 
     const bg = new Graphics();
-    bg.rect(0, 0, W, 56).fill({ color: PANEL }).stroke({ color, width: 2 });
+    bg.rect(0, 0, W, BANNER_H).fill({ color: PANEL }).stroke({ color, width: 2 });
     banner.addChild(bg);
 
     const txt = makeText(label, "title", 16, color);
     txt.anchor.set(0.5, 0.5);
     txt.x = W / 2;
-    txt.y = 28;
+    txt.y = BANNER_H / 2;
     banner.addChild(txt);
 
     return banner;
@@ -403,11 +402,11 @@ export class MatchResultsScreen extends Container {
   }
 
   private _buildContinueBtn(): Container {
-    const w = 280;
-    const h = 56;
+    const w = 220;
+    const h = 48;
     const btn = new Container();
     btn.x = W / 2 - w / 2;
-    btn.y = H - h - 24;
+    btn.y = H - h - 16;
     btn.eventMode = "static";
     btn.cursor = "pointer";
     btn.on("pointerdown", () => {
