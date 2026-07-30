@@ -80,7 +80,10 @@ export const LAYOUT = {
   // Keeper sits inside the goal mouth, ball in midfield, striker below.
   // Pushed down so they sit on the field, below the stands+wall (see GOAL.cy).
   KEEPER_POS: { x: 640, y: 270 },
-  BALL_POS: { x: 640, y: 360 },
+  // Penalty spot pulled further from the goal line (was y:360, only 30px past
+  // the line) so it reads as sitting on the open pitch, not right under the
+  // posts, while staying clear of the striker sprite above it.
+  BALL_POS: { x: 640, y: 400 },
   STRIKER_POS: { x: 640, y: 440 },
   CHARACTER_SCALE: 3.2,
   KEEPER_SCALE: 2.8, // keeper a bit smaller than the striker
@@ -97,7 +100,12 @@ export const LAYOUT = {
   // directly on playerArea, at fixed pixel coordinates — no resize-time
   // recomputation needed. The goal posts/net themselves are the real sprite
   // (LAYOUT.GOAL); this box just frames the shooting area around the spot.
-  PITCH_BOX: { x: 460, y: 330, w: 360, h: 150 },
+  // Goal line (drawn at PITCH_BOX.y) moved down off the goal sprite's bottom
+  // edge (~y:322) so it reads as the middle of the visible pitch floor rather
+  // than hugging the posts; box widened/heightened to keep framing the
+  // relocated penalty spot (BALL_POS.y:400) instead of leaving it near the
+  // top edge like the old 330/150 box did.
+  PITCH_BOX: { x: 450, y: 345, w: 380, h: 160 },
   PITCH_LINE_COLOR: 0xffffff,
   PENALTY_SPOT_RADIUS: 5,
 
@@ -124,8 +132,12 @@ export const LAYOUT = {
   // Tooltip bubble shown on card hover
   TOOLTIP: { w: 300, h: 120, pad: 14 },
 
-  // Confirm button — centred horizontally, above the hand row (no overlap).
-  CONFIRM_BTN: { x: 555, y: 530, w: 170, h: 52 },
+  // Confirm button — centred horizontally, vertically aligned with the hand
+  // row, sitting in the wide horizontal gap between the passive/active card
+  // groups (see SCEN-PS-CONFIRM-NO-OVERLAP for why this is safe: hand size is
+  // fixed at 3 passives + 2 actives by MatchFactory.ts, the sole production
+  // hand-composition path, so the gap between the two groups is always huge).
+  CONFIRM_BTN: { x: 555, y: 615, w: 170, h: 52 },
 
   // Card duel panel (during revealing, sidesMatched=true) — used to centre the
   // duel sprites/VS marker; backgrounds (drawn in _drawDuelBackground /

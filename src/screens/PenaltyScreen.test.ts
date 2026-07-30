@@ -342,10 +342,44 @@ describe("PenaltyScreen — Phase 17: landscape layout invariants", () => {
     }
   });
 
-  it("SCEN-PS-CONFIRM-NO-OVERLAP: confirm button sits above the hand row with no vertical overlap", () => {
-    const confirmBottom = LAYOUT.CONFIRM_BTN.y + LAYOUT.CONFIRM_BTN.h;
-    const handTop = LAYOUT.HAND.y - LAYOUT.HAND.cardH / 2;
-    expect(confirmBottom).toBeLessThanOrEqual(handTop);
+  it("SCEN-PS-CONFIRM-NO-OVERLAP: confirm button sits in the safe horizontal gap between the passive and active card groups, even at max hover scale", () => {
+    // Hand size is NOT variable in this game: MatchFactory.ts is the sole
+    // production path that composes a striker/goalkeeper hand, and it always
+    // hands out exactly 3 passives + 2 actives (ShootCard/SaveCard x3,
+    // Cheating+Nullify or Intimidate+Nullify x2) — there is no deck/draw
+    // mechanic that could grow this. _renderHand() centres each group inside
+    // its own 600px zone (see LAYOUT.HAND), so with these fixed counts the
+    // horizontal gap between the two groups is huge and CONFIRM_BTN can sit
+    // vertically overlapping the hand row (per the user's request to align it
+    // with the cards) as long as it stays inside that horizontal gap.
+    const { cardW, gap, zoneW, divider } = LAYOUT.HAND;
+    const maxHoverScale = 1.12; // must match the hover tween's maxScale in _tickHover/_makeCardVisual
+    const passiveCount = 3;
+    const activeCount = 2;
+
+    const groupBounds = (count: number, zoneX: number) => {
+      const totalW = count * cardW + (count - 1) * gap;
+      const firstCX = zoneX + (zoneW - totalW) / 2 + cardW / 2;
+      const lastCX = firstCX + (count - 1) * (cardW + gap);
+      const halfHovered = (cardW * maxHoverScale) / 2;
+      return {
+        left: firstCX - halfHovered,
+        right: lastCX + halfHovered,
+      };
+    };
+
+    const passives = groupBounds(passiveCount, 0);
+    const actives = groupBounds(activeCount, zoneW + divider);
+
+    const confirmLeft = LAYOUT.CONFIRM_BTN.x;
+    const confirmRight = LAYOUT.CONFIRM_BTN.x + LAYOUT.CONFIRM_BTN.w;
+
+    expect(confirmLeft).toBeGreaterThanOrEqual(passives.right);
+    expect(confirmRight).toBeLessThanOrEqual(actives.left);
+    // Still fully on-screen.
+    expect(LAYOUT.CONFIRM_BTN.y + LAYOUT.CONFIRM_BTN.h).toBeLessThanOrEqual(
+      LAYOUT.CANVAS_H,
+    );
   });
 
   it("SCEN-PS-HAND-IN-BOUNDS: hand row (cards) stays within canvas height", () => {
