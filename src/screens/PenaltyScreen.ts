@@ -60,7 +60,7 @@ export const LAYOUT = {
   // Real pitch/goal sprite (goal posts + grass). Native art is 104×62, rendered
   // bigger so it reads clearly. Positioned by its center (anchor 0.5) just below
   // the stands (fans + horizontal wall) so it never overlaps the crowd.
-  GOAL: { cx: 640, cy: 220, scaleX: 3.6, scaleY: 3.3 },
+  GOAL: { cx: 640, cy: 220, scaleX: 4, scaleY: 3.3 },
 
   // Environment (screen-space background, laid out from the real renderer size
   // so the pixel-art tiles instead of stretching). Grass color is sampled from
@@ -105,7 +105,7 @@ export const LAYOUT = {
   // than hugging the posts; box widened/heightened to keep framing the
   // relocated penalty spot (BALL_POS.y:400) instead of leaving it near the
   // top edge like the old 330/150 box did.
-  PITCH_BOX: { x: 450, y: 345, w: 380, h: 160 },
+  PITCH_BOX: { x: 330, y: 284, w: 620, h: 250 },
   PITCH_LINE_COLOR: 0xffffff,
   PENALTY_SPOT_RADIUS: 5,
 
