@@ -1,5 +1,6 @@
 import type { PlayOptions, Sound } from "@pixi/sound";
 import { sound } from "@pixi/sound";
+import type { AnimationPlaybackControls } from "motion";
 import { animate } from "motion";
 
 /**
@@ -19,6 +20,19 @@ export class BGM {
   private volume = 1;
   /** Whether the music is currently ducked to a quiet background level */
   private ducked = false;
+  /**
+   * The single volume tween (if any) currently in flight against `current`.
+   * Any operation that writes `current.volume` — directly or via a new
+   * tween — must cancel this first, so the last call always wins instead of
+   * racing a stale, still-running tween's next frame.
+   */
+  private _volumeTween: AnimationPlaybackControls | null = null;
+
+  /** Stop the currently in-flight volume tween, if any, so a fresh write is not raced. */
+  private _cancelTween(): void {
+    this._volumeTween?.stop();
+    this._volumeTween = null;
+  }
 
   /** Play a background music, fading out and stopping the previous, if there is one */
   public async play(alias: string, options?: PlayOptions) {
@@ -26,6 +40,11 @@ export class BGM {
     if (this.currentAlias === alias) return;
     // Do nothing if the alias was never registered (e.g. registerSounds() not called yet, or in tests)
     if (!sound.exists(alias)) return;
+
+    // Cancel whatever tween is active on the outgoing track (e.g. a
+    // duck()/unduck() in flight) so the fade-out below starts from a
+    // stable value instead of racing it.
+    this._cancelTween();
 
     // Fade out then stop current music
     if (this.current) {
@@ -44,7 +63,7 @@ export class BGM {
     this.currentAlias = alias;
     this.current.play({ loop: true, ...options });
     this.current.volume = 0;
-    animate(
+    this._volumeTween = animate(
       this.current,
       { volume: this.volume },
       { duration: 1, ease: "linear" },
@@ -58,6 +77,7 @@ export class BGM {
 
   /** Set background music volume */
   public setVolume(v: number) {
+    this._cancelTween();
     this.volume = v;
     if (this.current) {
       this.current.volume = this.ducked
@@ -78,9 +98,10 @@ export class BGM {
 
   /** Lower the music to a quiet background level (e.g. while a match is being played). */
   public duck() {
+    this._cancelTween();
     this.ducked = true;
     if (this.current) {
-      animate(
+      this._volumeTween = animate(
         this.current,
         { volume: this.volume * BGM.DUCK_FACTOR },
         { duration: 0.5, ease: "linear" },
@@ -90,9 +111,10 @@ export class BGM {
 
   /** Restore the music to its normal volume after duck(). */
   public unduck() {
+    this._cancelTween();
     this.ducked = false;
     if (this.current) {
-      animate(
+      this._volumeTween = animate(
         this.current,
         { volume: this.volume },
         { duration: 0.5, ease: "linear" },
